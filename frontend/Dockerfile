@@ -16,6 +16,11 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+# Docker sets HOSTNAME to the container id; without this override the Next.js
+# standalone server binds to that interface instead of 0.0.0.0 and is not
+# reachable via the published port from the host.
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
