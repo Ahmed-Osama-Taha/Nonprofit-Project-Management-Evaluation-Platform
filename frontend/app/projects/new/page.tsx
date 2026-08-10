@@ -1,0 +1,178 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
+import { RequireAuth } from "@/components/ui";
+
+const CATEGORIES = [
+  "Education",
+  "Health",
+  "Environment",
+  "Economic Development",
+  "Relief",
+  "Other",
+];
+
+function NewProjectInner() {
+  const router = useRouter();
+  const [form, setForm] = useState({
+    title: "",
+    category: "",
+    summary: "",
+    problem_statement: "",
+    goals: "",
+    kpis: "",
+    target_beneficiaries: "",
+    beneficiary_description: "",
+    requested_budget: "",
+    currency: "USD",
+    duration_months: "",
+    location: "",
+  });
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  function set(k: keyof typeof form, v: string) {
+    setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setErr("");
+    try {
+      const payload = {
+        title: form.title,
+        category: form.category || undefined,
+        summary: form.summary || undefined,
+        problem_statement: form.problem_statement || undefined,
+        goals: form.goals || undefined,
+        kpis: form.kpis || undefined,
+        beneficiary_description: form.beneficiary_description || undefined,
+        currency: form.currency,
+        location: form.location || undefined,
+        target_beneficiaries: form.target_beneficiaries
+          ? Number(form.target_beneficiaries)
+          : undefined,
+        requested_budget: form.requested_budget
+          ? Number(form.requested_budget)
+          : undefined,
+        duration_months: form.duration_months
+          ? Number(form.duration_months)
+          : undefined,
+      };
+      const p = await api.createProject(payload);
+      router.replace(`/projects/${p.id}`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to create project");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <h1>New Project</h1>
+      <p className="muted">
+        Save a draft now; you can upload attachments and submit for review from
+        the project page.
+      </p>
+      <div className="card">
+        {err && <div className="error">{err}</div>}
+        <form onSubmit={submit}>
+          <div className="field">
+            <label>Project title *</label>
+            <input value={form.title} onChange={(e) => set("title", e.target.value)} required />
+          </div>
+          <div className="row">
+            <div className="field">
+              <label>Category</label>
+              <select value={form.category} onChange={(e) => set("category", e.target.value)}>
+                <option value="">Select…</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Location</label>
+              <input value={form.location} onChange={(e) => set("location", e.target.value)} />
+            </div>
+          </div>
+          <div className="field">
+            <label>Short summary</label>
+            <textarea value={form.summary} onChange={(e) => set("summary", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Problem statement * (required to submit)</label>
+            <textarea
+              value={form.problem_statement}
+              onChange={(e) => set("problem_statement", e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label>Goals * (required to submit)</label>
+            <textarea value={form.goals} onChange={(e) => set("goals", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>KPIs / indicators</label>
+            <textarea value={form.kpis} onChange={(e) => set("kpis", e.target.value)} />
+          </div>
+          <div className="row">
+            <div className="field">
+              <label>Target beneficiaries (#)</label>
+              <input
+                type="number"
+                value={form.target_beneficiaries}
+                onChange={(e) => set("target_beneficiaries", e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>Duration (months)</label>
+              <input
+                type="number"
+                value={form.duration_months}
+                onChange={(e) => set("duration_months", e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="field">
+            <label>Beneficiary description</label>
+            <textarea
+              value={form.beneficiary_description}
+              onChange={(e) => set("beneficiary_description", e.target.value)}
+            />
+          </div>
+          <div className="row">
+            <div className="field">
+              <label>Requested budget</label>
+              <input
+                type="number"
+                value={form.requested_budget}
+                onChange={(e) => set("requested_budget", e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>Currency</label>
+              <input value={form.currency} onChange={(e) => set("currency", e.target.value)} />
+            </div>
+          </div>
+          <button className="btn" disabled={busy}>
+            {busy ? "Saving…" : "Save draft"}
+          </button>
+        </form>
+      </div>
+    </>
+  );
+}
+
+export default function NewProjectPage() {
+  return (
+    <RequireAuth roles={["organization"]}>
+      <NewProjectInner />
+    </RequireAuth>
+  );
+}
