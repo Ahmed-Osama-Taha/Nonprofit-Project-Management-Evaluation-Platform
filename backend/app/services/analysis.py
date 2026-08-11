@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -97,11 +99,30 @@ def retrieve_context(db: Session, project: Project, query: str, k: int = 6) -> l
     return [r.content for r in rows]
 
 
+# If a run has been marked "processing" more recently than this, assume it is
+# still in flight and refuse to start a second (expensive) LLM call.
+_IN_FLIGHT_SECONDS = 120
+
+
 def run_analysis(db: Session, project: Project) -> AIAnalysis:
-    """Full pipeline: index -> retrieve -> analyze -> persist. Idempotent per project."""
+    """Full pipeline: index -> retrieve -> analyze -> persist.
+
+    Guards against concurrent/duplicate runs: if an analysis is already
+    processing (and not stale), returns it instead of firing another LLM call —
+    so repeated "Run" clicks or a submit+manual race can't stack API spend.
+    """
     analysis = db.scalar(
         select(AIAnalysis).where(AIAnalysis.project_id == project.id)
     )
+
+    if analysis is not None and analysis.status == AIAnalysisStatus.processing:
+        updated = analysis.updated_at
+        if updated is not None:
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            if (datetime.now(timezone.utc) - updated).total_seconds() < _IN_FLIGHT_SECONDS:
+                return analysis  # a run is already in flight; don't stack another
+
     if analysis is None:
         analysis = AIAnalysis(project_id=project.id)
         db.add(analysis)

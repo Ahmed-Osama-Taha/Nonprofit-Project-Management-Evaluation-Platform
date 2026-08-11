@@ -108,7 +108,14 @@ def _get_llm():
         if settings.ai_provider == "anthropic":
             from anthropic import Anthropic
 
-            kwargs = {"api_key": settings.anthropic_api_key}
+            # Bound cost/latency: fail fast rather than the SDK's default
+            # 2 retries × 10-minute timeout (which is what made a stuck call
+            # hang "forever" and burn quota).
+            kwargs = {
+                "api_key": settings.anthropic_api_key,
+                "max_retries": 1,
+                "timeout": 90.0,
+            }
             if settings.anthropic_base_url:
                 kwargs["base_url"] = settings.anthropic_base_url
             _llm_client = Anthropic(**kwargs)
@@ -138,8 +145,13 @@ def _anthropic_text(system: str, user: str) -> str:
     )
     try:
         msg = client.messages.create(**base, thinking={"type": "disabled"})
-    except Exception:  # noqa: BLE001 — model may not allow disabling thinking
-        msg = client.messages.create(**base)
+    except Exception as exc:  # noqa: BLE001
+        # Only retry (a second billed call) when the model specifically rejected
+        # disabling thinking — never on rate limits, timeouts, or other errors.
+        if "thinking" in str(exc).lower():
+            msg = client.messages.create(**base)
+        else:
+            raise
     return "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
 
 
