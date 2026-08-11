@@ -13,5 +13,9 @@ export default function Home() {
     router.replace(user ? homeForRole(user.role) : "/login");
   }, [user, loading, router]);
 
-  return <p className="muted">Loading…</p>;
+  return (
+    <div className="center-page">
+      <div className="spinner" />
+    </div>
+  );
 }

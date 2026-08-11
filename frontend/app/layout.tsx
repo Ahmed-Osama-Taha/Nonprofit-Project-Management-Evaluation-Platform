@@ -1,12 +1,13 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { AuthProvider } from "@/lib/auth";
+import { I18nProvider } from "@/lib/i18n";
 import { NavBar } from "@/components/NavBar";
 
 export const metadata: Metadata = {
-  title: "Nonprofit Project Management & Evaluation Platform",
+  title: "Athar · أثر — Nonprofit Project Evaluation",
   description:
-    "Submit, review, and evaluate nonprofit project applications with AI assistance.",
+    "Athar (أثر): submit, review, and evaluate nonprofit project applications with AI (Claude) assistance. GCC / Saudi Arabia.",
 };
 
 export default function RootLayout({
@@ -15,12 +16,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="ar" dir="rtl">
       <body>
-        <AuthProvider>
-          <NavBar />
-          <main className="container">{children}</main>
-        </AuthProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <NavBar />
+            <main className="container">{children}</main>
+          </AuthProvider>
+        </I18nProvider>
       </body>
     </html>
   );

@@ -5,7 +5,8 @@ import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import type { Project } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
-import { RequireAuth, StatusBadge, money, num, dateStr } from "@/components/ui";
+import { useI18n, fmtMoney } from "@/lib/i18n";
+import { RequireAuth, StatusBadge, num, dateStr } from "@/components/ui";
 import { AIPanel } from "@/components/AIPanel";
 
 const EDITABLE = ["draft", "changes_requested"];
@@ -13,6 +14,7 @@ const EDITABLE = ["draft", "changes_requested"];
 function Detail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { t } = useI18n();
   const [p, setP] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -32,21 +34,27 @@ function Detail() {
     load();
   }, [load]);
 
-  if (loading) return <p className="muted">Loading…</p>;
+  if (loading)
+    return (
+      <div className="center-page">
+        <div className="spinner" />
+      </div>
+    );
   if (err) return <div className="error">{err}</div>;
   if (!p) return null;
 
-  const isOwner = user?.role === "organization" && p.organization.id === user.organization_id;
+  const isOwner =
+    user?.role === "organization" && p.organization.id === user.organization_id;
   const isReviewer = user?.role === "reviewer" || user?.role === "admin";
   const canEdit = isOwner && EDITABLE.includes(p.status);
 
   return (
     <>
-      <div className="flex-between" style={{ marginBottom: 12 }}>
+      <div className="flex-between" style={{ marginBottom: 14 }}>
         <div>
           <h1 style={{ margin: 0 }}>{p.title}</h1>
           <div className="small muted">
-            {p.organization.name} · submitted {dateStr(p.submitted_at)}
+            {p.organization.name} · {dateStr(p.submitted_at)}
           </div>
         </div>
         <StatusBadge status={p.status} />
@@ -54,40 +62,42 @@ function Detail() {
 
       {msg && <div className="success-box">{msg}</div>}
 
-      {/* AI panel visible to reviewers/admins */}
       {isReviewer && (
-        <AIPanel
-          projectId={p.id}
-          analysis={p.ai_analysis}
-          canRerun
-          onRerun={load}
-        />
+        <AIPanel projectId={p.id} analysis={p.ai_analysis} canRerun onRerun={load} />
       )}
 
       <div className="card">
-        <h3>Project details</h3>
+        <div className="card-title">
+          <h3 style={{ margin: 0 }}>{t("common.viewDetails")}</h3>
+        </div>
         <dl className="kv">
-          <dt>Category</dt>
-          <dd>{p.category || "—"}</dd>
-          <dt>Location</dt>
-          <dd>{p.location || "—"}</dd>
-          <dt>Requested budget</dt>
-          <dd>{money(p.requested_budget, p.currency)}</dd>
-          <dt>Target beneficiaries</dt>
+          <dt>{t("proj.category")}</dt>
+          <dd>{p.category || t("common.none")}</dd>
+          <dt>{t("proj.location")}</dt>
+          <dd>{p.location || t("common.none")}</dd>
+          <dt>{t("proj.budget")}</dt>
+          <dd>{fmtMoney(t, p.requested_budget)}</dd>
+          <dt>{t("proj.targetBeneficiaries")}</dt>
           <dd>{num(p.target_beneficiaries)}</dd>
-          <dt>Duration</dt>
-          <dd>{p.duration_months ? `${p.duration_months} months` : "—"}</dd>
+          <dt>{t("proj.duration")}</dt>
+          <dd>
+            {p.duration_months
+              ? `${p.duration_months} ${t("common.months")}`
+              : t("common.none")}
+          </dd>
         </dl>
-        <Section title="Summary" body={p.summary} />
-        <Section title="Problem statement" body={p.problem_statement} />
-        <Section title="Goals" body={p.goals} />
-        <Section title="KPIs" body={p.kpis} />
-        <Section title="Beneficiaries" body={p.beneficiary_description} />
+        <Section title={t("proj.summary")} body={p.summary} />
+        <Section title={t("proj.problem")} body={p.problem_statement} />
+        <Section title={t("proj.goals")} body={p.goals} />
+        <Section title={t("proj.kpis")} body={p.kpis} />
+        <Section title={t("proj.beneficiaryDesc")} body={p.beneficiary_description} />
       </div>
 
       <Documents project={p} canEdit={!!canEdit} onChange={load} />
 
-      {isOwner && <OwnerActions project={p} onChange={load} setMsg={setMsg} setErr={setErr} />}
+      {isOwner && (
+        <OwnerActions project={p} onChange={load} setMsg={setMsg} setErr={setErr} />
+      )}
       {canEdit && <EditForm project={p} onSaved={load} />}
 
       <Reviews project={p} />
@@ -117,6 +127,7 @@ function Documents({
   canEdit: boolean;
   onChange: () => void;
 }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -143,29 +154,39 @@ function Documents({
 
   return (
     <div className="card">
-      <div className="flex-between">
-        <h3 style={{ margin: 0 }}>Attachments</h3>
+      <div className="card-title">
+        <h3 style={{ margin: 0 }}>{t("proj.documents")}</h3>
         {canEdit && (
           <label className="btn btn-secondary btn-sm" style={{ margin: 0 }}>
-            {busy ? "Uploading…" : "+ Upload file"}
-            <input type="file" onChange={upload} style={{ display: "none" }} disabled={busy} />
+            {busy ? t("common.loading") : `+ ${t("proj.upload")}`}
+            <input
+              type="file"
+              onChange={upload}
+              style={{ display: "none" }}
+              disabled={busy}
+            />
           </label>
         )}
       </div>
-      {err && <div className="error" style={{ marginTop: 10 }}>{err}</div>}
+      {err && (
+        <div className="error" style={{ marginTop: 10 }}>
+          {err}
+        </div>
+      )}
       {(project.documents?.length ?? 0) === 0 ? (
-        <p className="muted small">No attachments.</p>
+        <p className="muted small">{t("common.none")}</p>
       ) : (
         <div style={{ marginTop: 8 }}>
           {project.documents!.map((d) => (
             <div key={d.id} className="list-item flex-between">
-              <div>
-                <button className="btn-secondary btn btn-sm" onClick={() => download(d.id)}>
-                  {d.filename}
-                </button>
-              </div>
+              <button
+                className="btn-secondary btn btn-sm"
+                onClick={() => download(d.id)}
+              >
+                {d.filename}
+              </button>
               <span className="small muted">
-                {d.content_type} · extraction: {d.extraction_status}
+                {d.content_type} · {d.extraction_status}
               </span>
             </div>
           ))}
@@ -186,6 +207,7 @@ function OwnerActions({
   setMsg: (s: string) => void;
   setErr: (s: string) => void;
 }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const canSubmit = ["draft", "changes_requested"].includes(project.status);
   if (!canSubmit) return null;
@@ -196,7 +218,7 @@ function OwnerActions({
     setErr("");
     try {
       await api.submitProject(project.id);
-      setMsg("Submitted for review. AI analysis is running in the background.");
+      setMsg("✓");
       onChange();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Submission failed");
@@ -208,15 +230,9 @@ function OwnerActions({
   return (
     <div className="card">
       <div className="flex-between">
-        <div>
-          <strong>Ready to submit?</strong>
-          <p className="small muted" style={{ margin: 0 }}>
-            Problem statement and goals are required. Submitting locks editing
-            until a reviewer responds.
-          </p>
-        </div>
+        <strong>{t("proj.submitConfirm")}</strong>
         <button className="btn btn-success" onClick={submit} disabled={busy}>
-          {busy ? "Submitting…" : "Submit for review"}
+          {busy ? t("common.loading") : t("proj.submitConfirm")}
         </button>
       </div>
     </div>
@@ -224,6 +240,7 @@ function OwnerActions({
 }
 
 function EditForm({ project, onSaved }: { project: Project; onSaved: () => void }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     title: project.title,
@@ -245,7 +262,9 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
         problem_statement: form.problem_statement,
         goals: form.goals,
         kpis: form.kpis,
-        requested_budget: form.requested_budget ? Number(form.requested_budget) : null,
+        requested_budget: form.requested_budget
+          ? Number(form.requested_budget)
+          : null,
         target_beneficiaries: form.target_beneficiaries
           ? Number(form.target_beneficiaries)
           : null,
@@ -265,40 +284,45 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
     return (
       <div className="card">
         <button className="btn btn-secondary" onClick={() => setOpen(true)}>
-          Edit project
+          {t("proj.title")} ✎
         </button>
       </div>
     );
 
   return (
     <div className="card">
-      <h3>Edit project</h3>
+      <div className="card-title">
+        <h3 style={{ margin: 0 }}>{t("proj.title")}</h3>
+      </div>
       <div className="field">
-        <label>Title</label>
+        <label>{t("proj.title")}</label>
         <input value={form.title} onChange={(e) => set("title", e.target.value)} />
       </div>
       <div className="field">
-        <label>Summary</label>
-        <textarea value={form.summary} onChange={(e) => set("summary", e.target.value)} />
+        <label>{t("proj.summary")}</label>
+        <textarea
+          value={form.summary}
+          onChange={(e) => set("summary", e.target.value)}
+        />
       </div>
       <div className="field">
-        <label>Problem statement</label>
+        <label>{t("proj.problem")}</label>
         <textarea
           value={form.problem_statement}
           onChange={(e) => set("problem_statement", e.target.value)}
         />
       </div>
       <div className="field">
-        <label>Goals</label>
+        <label>{t("proj.goals")}</label>
         <textarea value={form.goals} onChange={(e) => set("goals", e.target.value)} />
       </div>
       <div className="field">
-        <label>KPIs</label>
+        <label>{t("proj.kpis")}</label>
         <textarea value={form.kpis} onChange={(e) => set("kpis", e.target.value)} />
       </div>
       <div className="row">
         <div className="field">
-          <label>Requested budget</label>
+          <label>{t("proj.budget")}</label>
           <input
             type="number"
             value={form.requested_budget}
@@ -306,7 +330,7 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
           />
         </div>
         <div className="field">
-          <label>Target beneficiaries</label>
+          <label>{t("proj.targetBeneficiaries")}</label>
           <input
             type="number"
             value={form.target_beneficiaries}
@@ -316,10 +340,10 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
       </div>
       <div className="flex">
         <button className="btn" onClick={save} disabled={busy}>
-          {busy ? "Saving…" : "Save"}
+          {busy ? t("common.loading") : t("common.save")}
         </button>
         <button className="btn btn-secondary" onClick={() => setOpen(false)}>
-          Cancel
+          {t("common.cancel")}
         </button>
       </div>
     </div>
@@ -327,16 +351,19 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
 }
 
 function Reviews({ project }: { project: Project }) {
+  const { t } = useI18n();
   if (!project.reviews || project.reviews.length === 0) return null;
   return (
     <div className="card">
-      <h3>Review history</h3>
+      <div className="card-title">
+        <h3 style={{ margin: 0 }}>{t("proj.reviews")}</h3>
+      </div>
       {project.reviews.map((r) => (
         <div key={r.id} className="list-item">
           <div className="flex-between">
             <strong>{r.reviewer.full_name}</strong>
             <span className={`badge badge-${decisionBadge(r.decision)}`}>
-              {r.decision.replace("_", " ")}
+              {t(`status.${decisionBadge(r.decision)}`)}
             </span>
           </div>
           {r.comment && <p style={{ margin: "6px 0 0" }}>{r.comment}</p>}
@@ -354,7 +381,14 @@ function decisionBadge(d: string) {
   return "submitted";
 }
 
-function ReviewActions({ project, onChange }: { project: Project; onChange: () => void }) {
+function ReviewActions({
+  project,
+  onChange,
+}: {
+  project: Project;
+  onChange: () => void;
+}) {
+  const { t } = useI18n();
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -362,7 +396,9 @@ function ReviewActions({ project, onChange }: { project: Project; onChange: () =
   const decided = ["approved", "rejected"].includes(project.status);
   const notSubmitted = project.status === "draft";
 
-  async function act(decision: "comment" | "request_changes" | "approve" | "reject") {
+  async function act(
+    decision: "comment" | "request_changes" | "approve" | "reject",
+  ) {
     setBusy(true);
     setErr("");
     try {
@@ -376,45 +412,62 @@ function ReviewActions({ project, onChange }: { project: Project; onChange: () =
     }
   }
 
-  if (notSubmitted)
-    return (
-      <div className="card">
-        <p className="muted">This project has not been submitted yet.</p>
-      </div>
-    );
+  if (notSubmitted) return null;
 
   if (decided)
     return (
       <div className="card">
-        <p className="muted">
-          Final decision recorded: <StatusBadge status={project.status} />
+        <p className="muted flex">
+          {t("review.decision")}: <StatusBadge status={project.status} />
         </p>
       </div>
     );
 
   return (
     <div className="card">
-      <h3>Reviewer decision</h3>
-      <p className="small muted">
-        The reviewer makes the final call. AI output above is advisory.
-      </p>
+      <div className="card-title">
+        <div>
+          <h3 style={{ margin: 0 }}>{t("review.decision")}</h3>
+          <span className="section-hint">{t("ai.subtitle")}</span>
+        </div>
+      </div>
       {err && <div className="error">{err}</div>}
       <div className="field">
-        <label>Comment (required for request-changes / reject)</label>
-        <textarea value={comment} onChange={(e) => setComment(e.target.value)} />
+        <label>{t("review.comment")}</label>
+        <textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder={t("review.addComment")}
+        />
       </div>
       <div className="chip-row">
-        <button className="btn btn-secondary" onClick={() => act("comment")} disabled={busy}>
-          Add comment
+        <button
+          className="btn btn-secondary"
+          onClick={() => act("comment")}
+          disabled={busy}
+        >
+          {t("review.comment")}
         </button>
-        <button className="btn btn-warning" onClick={() => act("request_changes")} disabled={busy}>
-          Request changes
+        <button
+          className="btn btn-warning"
+          onClick={() => act("request_changes")}
+          disabled={busy}
+        >
+          {t("review.requestChanges")}
         </button>
-        <button className="btn btn-success" onClick={() => act("approve")} disabled={busy}>
-          Approve
+        <button
+          className="btn btn-success"
+          onClick={() => act("approve")}
+          disabled={busy}
+        >
+          {t("review.approve")}
         </button>
-        <button className="btn btn-danger" onClick={() => act("reject")} disabled={busy}>
-          Reject
+        <button
+          className="btn btn-danger"
+          onClick={() => act("reject")}
+          disabled={busy}
+        >
+          {t("review.reject")}
         </button>
       </div>
     </div>
@@ -422,6 +475,7 @@ function ReviewActions({ project, onChange }: { project: Project; onChange: () =
 }
 
 function ChatBox({ projectId }: { projectId: string }) {
+  const { t } = useI18n();
   const [q, setQ] = useState("");
   const [answer, setAnswer] = useState("");
   const [sources, setSources] = useState<string[]>([]);
@@ -446,20 +500,19 @@ function ChatBox({ projectId }: { projectId: string }) {
 
   return (
     <div className="card">
-      <h3>Ask the documents (RAG)</h3>
-      <p className="small muted">
-        Grounded Q&A over this project&apos;s attachments and application data.
-      </p>
+      <div className="card-title">
+        <h3 style={{ margin: 0 }}>{t("ai.ask")}</h3>
+      </div>
       {err && <div className="error">{err}</div>}
       <div className="flex">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="e.g. What is the cost per beneficiary?"
+          placeholder={t("ai.askPlaceholder")}
           onKeyDown={(e) => e.key === "Enter" && ask()}
         />
         <button className="btn" onClick={ask} disabled={busy}>
-          {busy ? "…" : "Ask"}
+          {busy ? "…" : t("ai.ask")}
         </button>
       </div>
       {answer && (
@@ -467,9 +520,16 @@ function ChatBox({ projectId }: { projectId: string }) {
           <p style={{ whiteSpace: "pre-wrap" }}>{answer}</p>
           {sources.length > 0 && (
             <details>
-              <summary className="small muted">{sources.length} source excerpt(s)</summary>
+              <summary className="small muted">{sources.length}</summary>
               {sources.map((s, i) => (
-                <p key={i} className="small muted" style={{ borderLeft: "3px solid #e5e7eb", paddingLeft: 8 }}>
+                <p
+                  key={i}
+                  className="small muted"
+                  style={{
+                    borderInlineStart: "3px solid var(--border)",
+                    paddingInlineStart: 8,
+                  }}
+                >
                   {s.slice(0, 300)}…
                 </p>
               ))}

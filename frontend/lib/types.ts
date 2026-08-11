@@ -43,6 +43,12 @@ export interface Risk {
   detail: string;
 }
 
+export interface Criterion {
+  name: string;
+  score: number;
+  rationale?: string;
+}
+
 export interface AIAnalysis {
   id: string;
   status: "pending" | "processing" | "completed" | "failed";
@@ -52,8 +58,11 @@ export interface AIAnalysis {
   risks?: Risk[] | null;
   missing_information?: string[] | null;
   suggested_questions?: string[] | null;
+  strengths?: string[] | null;
+  criteria?: Criterion[] | null;
   preliminary_score?: number | null;
   preliminary_recommendation?: string | null;
+  recommendation_rationale?: string | null;
   extracted_fields?: Record<string, unknown> | null;
   error?: string | null;
   updated_at: string;
@@ -107,4 +116,64 @@ export interface DashboardStats {
   total_organizations: number;
   total_users: number;
   pending_review: number;
+}
+
+export interface AuditEntry {
+  id: string;
+  actor_email?: string | null;
+  actor_role?: string | null;
+  action: string;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  detail?: Record<string, unknown> | null;
+  method?: string | null;
+  path?: string | null;
+  status_code?: number | null;
+  latency_ms?: number | null;
+  ip?: string | null;
+  request_id?: string | null;
+  s3_key?: string | null;
+  created_at: string;
+}
+
+export interface CategoryStat {
+  category: string;
+  count: number;
+  total_budget: number;
+  avg_score?: number | null;
+}
+
+export interface LabelValue {
+  label: string;
+  value: number;
+}
+
+export interface QueueItem {
+  id: string;
+  title: string;
+  organization: string;
+  category?: string | null;
+  status: ProjectStatus;
+  requested_budget?: number | null;
+  currency: string;
+  ai_score?: number | null;
+  ai_recommendation?: string | null;
+  risk_high: number;
+  submitted_at?: string | null;
+}
+
+export interface ReviewerDashboard {
+  total_projects: number;
+  pending_review: number;
+  decided: number;
+  approval_rate?: number | null;
+  total_requested_budget: number;
+  approved_budget: number;
+  currency: string;
+  by_status: Record<string, number>;
+  by_category: CategoryStat[];
+  risk_distribution: Record<string, number>;
+  avg_ai_score?: number | null;
+  ai_score_buckets: LabelValue[];
+  queue: QueueItem[];
 }

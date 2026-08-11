@@ -1,47 +1,88 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth, homeForRole } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 
 export function NavBar() {
   const { user, logout } = useAuth();
+  const { t, lang, setLang } = useI18n();
+  const pathname = usePathname();
+
+  const link = (href: string, label: string) => (
+    <Link
+      href={href}
+      className={`nav-link${pathname === href ? " active" : ""}`}
+    >
+      {label}
+    </Link>
+  );
 
   return (
     <nav className="nav">
       <div className="nav-inner">
         <Link href={user ? homeForRole(user.role) : "/login"} className="brand">
-          Non<span>profit</span> Platform
+          <span className="brand-mark">أ</span>
+          <span>
+            {t("app.name")}{" "}
+            <span className="brand-sub">Athar</span>
+          </span>
         </Link>
+
         {user && (
           <div className="nav-links">
             {user.role === "organization" && (
               <>
-                <Link href="/projects">My Projects</Link>
-                <Link href="/projects/new">New Project</Link>
+                {link("/projects", t("proj.myProjects"))}
+                {link("/projects/new", t("nav.newProject"))}
               </>
             )}
-            {user.role === "reviewer" && <Link href="/reviewer">Review Queue</Link>}
+            {user.role === "reviewer" && (
+              <>
+                {link("/reviewer", t("nav.reviewer"))}
+                {link("/projects", t("nav.projects"))}
+              </>
+            )}
             {user.role === "admin" && (
               <>
-                <Link href="/admin">Dashboard</Link>
-                <Link href="/reviewer">Projects</Link>
+                {link("/admin", t("nav.admin"))}
+                {link("/reviewer", t("nav.reviewer"))}
               </>
             )}
           </div>
         )}
+
         <div className="nav-spacer" />
+
+        <div className="lang-toggle" role="group" aria-label="language">
+          <button
+            className={lang === "ar" ? "active" : ""}
+            onClick={() => setLang("ar")}
+          >
+            عربي
+          </button>
+          <button
+            className={lang === "en" ? "active" : ""}
+            onClick={() => setLang("en")}
+          >
+            EN
+          </button>
+        </div>
+
         {user ? (
           <div className="flex">
             <span className="nav-user">
-              {user.full_name} <span className="pill">{user.role}</span>
+              {user.full_name}{" "}
+              <span className="pill">{t(`role.${user.role}`)}</span>
             </span>
             <button className="btn btn-secondary btn-sm" onClick={logout}>
-              Logout
+              {t("nav.logout")}
             </button>
           </div>
         ) : (
           <Link href="/login" className="btn btn-sm">
-            Login
+            {t("nav.login")}
           </Link>
         )}
       </div>
