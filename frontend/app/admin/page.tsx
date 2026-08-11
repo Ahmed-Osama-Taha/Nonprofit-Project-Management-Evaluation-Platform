@@ -2,18 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { DashboardStats, User } from "@/lib/types";
+import { useI18n, statusLabel } from "@/lib/i18n";
+import type { AuditEntry, DashboardStats, User } from "@/lib/types";
 import { RequireAuth, dateStr } from "@/components/ui";
 
-interface AuditEntry {
-  id: string;
-  actor_email?: string | null;
-  action: string;
-  entity_type?: string | null;
-  created_at: string;
-}
-
 function AdminInner() {
+  const { t } = useI18n();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
@@ -25,7 +19,7 @@ function AdminInner() {
   function loadAll() {
     api.stats().then(setStats).catch(() => {});
     api.users().then(setUsers).catch(() => {});
-    api.audit().then((a) => setAudit(a as unknown as AuditEntry[])).catch(() => {});
+    api.audit(120).then(setAudit).catch(() => {});
   }
 
   useEffect(loadAll, []);
@@ -36,7 +30,7 @@ function AdminInner() {
     setErr("");
     try {
       await api.createReviewer(form);
-      setMsg(`Reviewer ${form.email} created.`);
+      setMsg(`✓ ${form.email}`);
       setForm({ full_name: "", email: "", password: "" });
       loadAll();
     } catch (e) {
@@ -44,17 +38,27 @@ function AdminInner() {
     }
   }
 
+  const tabs: { key: typeof tab; label: string }[] = [
+    { key: "overview", label: t("nav.dashboard") },
+    { key: "users", label: t("admin.users") },
+    { key: "audit", label: t("admin.audit") },
+  ];
+
   return (
     <>
-      <h1>Admin Dashboard</h1>
+      <div className="hero">
+        <h1>{t("admin.title")}</h1>
+        <p>{t("app.tagline")}</p>
+      </div>
+
       <div className="chip-row" style={{ marginBottom: 16 }}>
-        {(["overview", "users", "audit"] as const).map((t) => (
+        {tabs.map((tb) => (
           <button
-            key={t}
-            className={`btn btn-sm ${tab === t ? "" : "btn-secondary"}`}
-            onClick={() => setTab(t)}
+            key={tb.key}
+            className={`btn btn-sm ${tab === tb.key ? "" : "btn-secondary"}`}
+            onClick={() => setTab(tb.key)}
           >
-            {t[0].toUpperCase() + t.slice(1)}
+            {tb.label}
           </button>
         ))}
       </div>
@@ -64,29 +68,31 @@ function AdminInner() {
           <div className="grid-stats" style={{ marginBottom: 16 }}>
             <div className="stat">
               <div className="num">{stats.total_projects}</div>
-              <div className="lbl">Projects</div>
+              <div className="lbl">{t("rev.totalProjects")}</div>
             </div>
             <div className="stat">
               <div className="num">{stats.pending_review}</div>
-              <div className="lbl">Pending review</div>
+              <div className="lbl">{t("rev.pending")}</div>
             </div>
             <div className="stat">
               <div className="num">{stats.total_organizations}</div>
-              <div className="lbl">Organizations</div>
+              <div className="lbl">{t("admin.orgs")}</div>
             </div>
             <div className="stat">
               <div className="num">{stats.total_users}</div>
-              <div className="lbl">Users</div>
+              <div className="lbl">{t("admin.users")}</div>
             </div>
           </div>
           <div className="card">
-            <h3>Projects by status</h3>
+            <div className="card-title">
+              <h3>{t("rev.byStatus")}</h3>
+            </div>
             <table>
               <tbody>
                 {Object.entries(stats.by_status).map(([k, v]) => (
                   <tr key={k}>
-                    <td style={{ textTransform: "capitalize" }}>{k.replace("_", " ")}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{v}</td>
+                    <td>{statusLabel(t, k)}</td>
+                    <td style={{ textAlign: "end", fontWeight: 700 }}>{v}</td>
                   </tr>
                 ))}
               </tbody>
@@ -98,13 +104,15 @@ function AdminInner() {
       {tab === "users" && (
         <>
           <div className="card">
-            <h3>Provision reviewer</h3>
+            <div className="card-title">
+              <h3>{t("admin.createReviewer")}</h3>
+            </div>
             {msg && <div className="success-box">{msg}</div>}
             {err && <div className="error">{err}</div>}
             <form onSubmit={createReviewer}>
               <div className="row">
                 <div className="field">
-                  <label>Full name</label>
+                  <label>{t("auth.fullName")}</label>
                   <input
                     value={form.full_name}
                     onChange={(e) => setForm({ ...form, full_name: e.target.value })}
@@ -112,7 +120,7 @@ function AdminInner() {
                   />
                 </div>
                 <div className="field">
-                  <label>Email</label>
+                  <label>{t("auth.email")}</label>
                   <input
                     type="email"
                     value={form.email}
@@ -122,7 +130,7 @@ function AdminInner() {
                 </div>
               </div>
               <div className="field">
-                <label>Password (min 8)</label>
+                <label>{t("auth.password")}</label>
                 <input
                   type="password"
                   minLength={8}
@@ -131,63 +139,103 @@ function AdminInner() {
                   required
                 />
               </div>
-              <button className="btn">Create reviewer</button>
+              <button className="btn">{t("admin.createReviewer")}</button>
             </form>
           </div>
 
           <div className="card">
-            <h3>All users</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Organization</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id}>
-                    <td>{u.full_name}</td>
-                    <td>{u.email}</td>
-                    <td>
-                      <span className="pill">{u.role}</span>
-                    </td>
-                    <td>{u.organization?.name || "—"}</td>
+            <div className="card-title">
+              <h3>{t("admin.users")}</h3>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("auth.fullName")}</th>
+                    <th>{t("auth.email")}</th>
+                    <th>{t("review.decision")}</th>
+                    <th>{t("role.organization")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u.id}>
+                      <td>{u.full_name}</td>
+                      <td>{u.email}</td>
+                      <td>
+                        <span className="pill">{t(`role.${u.role}`)}</span>
+                      </td>
+                      <td>{u.organization?.name || t("common.none")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}
 
       {tab === "audit" && (
         <div className="card">
-          <h3>Audit log</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>When</th>
-                <th>Actor</th>
-                <th>Action</th>
-                <th>Entity</th>
-              </tr>
-            </thead>
-            <tbody>
-              {audit.map((a) => (
-                <tr key={a.id}>
-                  <td className="small muted">{dateStr(a.created_at)}</td>
-                  <td>{a.actor_email || "system"}</td>
-                  <td>
-                    <code>{a.action}</code>
-                  </td>
-                  <td className="small muted">{a.entity_type || "—"}</td>
+          <div className="card-title">
+            <div>
+              <h3 style={{ margin: 0 }}>{t("admin.audit")}</h3>
+              <span className="section-hint">{t("admin.auditHint")}</span>
+            </div>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>{t("admin.when")}</th>
+                  <th>{t("admin.actor")}</th>
+                  <th>{t("admin.action")}</th>
+                  <th>{t("admin.method")}</th>
+                  <th>{t("admin.path")}</th>
+                  <th>{t("admin.statusCode")}</th>
+                  <th>{t("admin.latency")}</th>
+                  <th>{t("admin.stored")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {audit.map((a) => (
+                  <tr key={a.id}>
+                    <td className="small muted">{dateStr(a.created_at)}</td>
+                    <td className="small">
+                      {a.actor_email || "system"}
+                      {a.actor_role && (
+                        <span className="pill" style={{ marginInlineStart: 6 }}>
+                          {t(`role.${a.actor_role}`)}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <code>{a.action}</code>
+                    </td>
+                    <td className="small">{a.method || "—"}</td>
+                    <td className="small muted">{a.path || a.entity_type || "—"}</td>
+                    <td className="small">
+                      {a.status_code ? (
+                        <span
+                          className={
+                            a.status_code >= 400 ? "sev-high" : "rec-approve"
+                          }
+                        >
+                          {a.status_code}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="small muted">
+                      {a.latency_ms != null ? `${a.latency_ms}ms` : "—"}
+                    </td>
+                    <td>{a.s3_key ? "✓" : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </>

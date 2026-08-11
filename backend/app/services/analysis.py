@@ -122,8 +122,11 @@ def run_analysis(db: Session, project: Project) -> AIAnalysis:
         analysis.risks = result.get("risks")
         analysis.missing_information = result.get("missing_information")
         analysis.suggested_questions = result.get("suggested_questions")
+        analysis.strengths = result.get("strengths")
+        analysis.criteria = result.get("criteria")
         analysis.preliminary_score = result.get("preliminary_score")
         analysis.preliminary_recommendation = result.get("preliminary_recommendation")
+        analysis.recommendation_rationale = result.get("recommendation_rationale")
         analysis.extracted_fields = result.get("extracted_fields")
         analysis.raw_output = {k: v for k, v in result.items() if k != "_model"}
 

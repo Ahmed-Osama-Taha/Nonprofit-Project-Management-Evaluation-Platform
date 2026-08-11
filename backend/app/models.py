@@ -213,8 +213,11 @@ class AIAnalysis(Base, TimestampMixin):
     risks: Mapped[list | None] = mapped_column(JSONB)
     missing_information: Mapped[list | None] = mapped_column(JSONB)
     suggested_questions: Mapped[list | None] = mapped_column(JSONB)
+    strengths: Mapped[list | None] = mapped_column(JSONB)
+    criteria: Mapped[list | None] = mapped_column(JSONB)  # per-criterion scorecard
     preliminary_score: Mapped[float | None] = mapped_column(Float)
     preliminary_recommendation: Mapped[str | None] = mapped_column(String(64))
+    recommendation_rationale: Mapped[str | None] = mapped_column(Text)
     extracted_fields: Mapped[dict | None] = mapped_column(JSONB)
     raw_output: Mapped[dict | None] = mapped_column(JSONB)
     error: Mapped[str | None] = mapped_column(Text)
@@ -257,15 +260,36 @@ class Notification(Base):
 
 
 class AuditLog(Base):
+    """Append-only audit trail.
+
+    Two kinds of entries share this table:
+      * domain events   — e.g. `project.submit`, `review.approve`
+      * api access log   — one row per authenticated HTTP request (method, path,
+                            status, latency), written by the audit middleware.
+    Every row is also shipped to object storage (S3/MinIO) for tamper-evident,
+    long-term retention.
+    """
+
     __tablename__ = "audit_logs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     actor_id: Mapped[str | None] = mapped_column(String(36))
     actor_email: Mapped[str | None] = mapped_column(String(255))
+    actor_role: Mapped[str | None] = mapped_column(String(32))
     action: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     entity_type: Mapped[str | None] = mapped_column(String(64))
     entity_id: Mapped[str | None] = mapped_column(String(36))
     detail: Mapped[dict | None] = mapped_column(JSONB)
+
+    # HTTP access-log fields (null for domain events)
+    method: Mapped[str | None] = mapped_column(String(8))
+    path: Mapped[str | None] = mapped_column(String(512))
+    status_code: Mapped[int | None] = mapped_column(Integer)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    ip: Mapped[str | None] = mapped_column(String(64))
+    request_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    s3_key: Mapped[str | None] = mapped_column(String(1024))
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )

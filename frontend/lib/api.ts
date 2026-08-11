@@ -2,11 +2,13 @@
 
 import type {
   AIAnalysis,
+  AuditEntry,
   DashboardStats,
   DocumentFile,
   Notification,
   Project,
   Review,
+  ReviewerDashboard,
   User,
 } from "./types";
 
@@ -143,11 +145,16 @@ export const api = {
     request<Notification>(`/api/notifications/${id}/read`, { method: "POST" }),
   markAllRead: () => request("/api/notifications/read-all", { method: "POST" }),
 
+  // Analytics
+  reviewerDashboard: () =>
+    request<ReviewerDashboard>("/api/analytics/reviewer"),
+
   // Admin
   stats: () => request<DashboardStats>("/api/admin/stats"),
   users: () => request<User[]>("/api/admin/users"),
   organizations: () => request("/api/admin/organizations"),
-  audit: () => request<Record<string, unknown>[]>("/api/admin/audit"),
+  audit: (limit = 100) =>
+    request<AuditEntry[]>(`/api/admin/audit?limit=${limit}`),
   createReviewer: (payload: {
     email: string;
     password: string;

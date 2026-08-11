@@ -71,7 +71,7 @@ class ProjectBase(BaseModel):
     target_beneficiaries: int | None = None
     beneficiary_description: str | None = None
     requested_budget: float | None = None
-    currency: str = "USD"
+    currency: str = "SAR"
     duration_months: int | None = None
     location: str | None = None
 
@@ -113,8 +113,11 @@ class AIAnalysisOut(ORMModel):
     risks: list | None = None
     missing_information: list | None = None
     suggested_questions: list | None = None
+    strengths: list | None = None
+    criteria: list | None = None
     preliminary_score: float | None = None
     preliminary_recommendation: str | None = None
+    recommendation_rationale: str | None = None
     extracted_fields: dict | None = None
     error: str | None = None
     updated_at: datetime
@@ -174,10 +177,18 @@ class NotificationOut(ORMModel):
 class AuditLogOut(ORMModel):
     id: str
     actor_email: str | None = None
+    actor_role: str | None = None
     action: str
     entity_type: str | None = None
     entity_id: str | None = None
     detail: dict | None = None
+    method: str | None = None
+    path: str | None = None
+    status_code: int | None = None
+    latency_ms: int | None = None
+    ip: str | None = None
+    request_id: str | None = None
+    s3_key: str | None = None
     created_at: datetime
 
 
@@ -198,6 +209,49 @@ class DashboardStats(BaseModel):
     total_organizations: int
     total_users: int
     pending_review: int
+
+
+# ── Reviewer analytics ───────────────────────────────────────
+class LabelValue(BaseModel):
+    label: str
+    value: float
+
+
+class CategoryStat(BaseModel):
+    category: str
+    count: int
+    total_budget: float
+    avg_score: float | None = None
+
+
+class QueueItem(BaseModel):
+    id: str
+    title: str
+    organization: str
+    category: str | None = None
+    status: ProjectStatus
+    requested_budget: float | None = None
+    currency: str
+    ai_score: float | None = None
+    ai_recommendation: str | None = None
+    risk_high: int = 0
+    submitted_at: datetime | None = None
+
+
+class ReviewerDashboard(BaseModel):
+    total_projects: int
+    pending_review: int
+    decided: int
+    approval_rate: float | None = None
+    total_requested_budget: float
+    approved_budget: float
+    currency: str
+    by_status: dict[str, int]
+    by_category: list[CategoryStat]
+    risk_distribution: dict[str, int]
+    avg_ai_score: float | None = None
+    ai_score_buckets: list[LabelValue]
+    queue: list[QueueItem]
 
 
 Token.model_rebuild()

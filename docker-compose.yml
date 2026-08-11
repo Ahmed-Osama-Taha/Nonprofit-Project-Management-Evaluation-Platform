@@ -50,11 +50,20 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
       S3_BUCKET: ${S3_BUCKET:-nppm-documents}
       S3_REGION: ${S3_REGION:-us-east-1}
+      AUDIT_TO_S3: ${AUDIT_TO_S3:-true}
+      DEFAULT_CURRENCY: ${DEFAULT_CURRENCY:-SAR}
+      # AI — Anthropic Claude is the default LLM provider. Set ANTHROPIC_API_KEY
+      # in your .env to enable AI features (the platform runs fully without it).
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5}
+      # Embeddings are pluggable; "local" needs no external key (works with only Claude).
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      AI_EMBEDDING_DIM: ${AI_EMBEDDING_DIM:-1536}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       AI_CHAT_MODEL: ${AI_CHAT_MODEL:-gpt-4o-mini}
       AI_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-text-embedding-3-small}
-      AI_EMBEDDING_DIM: ${AI_EMBEDDING_DIM:-1536}
       SEED_ON_STARTUP: ${SEED_ON_STARTUP:-true}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@demo.org}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin123!}
@@ -64,6 +73,19 @@ services:
       SEED_ORG_PASSWORD: ${SEED_ORG_PASSWORD:-Org123!}
     ports:
       - "8000:8000"
+
+  # Lightweight web UI to browse/query PostgreSQL. Open http://localhost:8080
+  # System: PostgreSQL · Server: db · User/Pass/DB: nppm (defaults).
+  adminer:
+    image: adminer:4
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+      ADMINER_DESIGN: dracula
+    ports:
+      - "8080:8080"
 
   frontend:
     build:
