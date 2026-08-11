@@ -143,16 +143,23 @@ def _anthropic_text(system: str, user: str) -> str:
         system=system,
         messages=[{"role": "user", "content": user}],
     )
+
+    def _stream(**extra) -> str:
+        # Stream so a slow model (e.g. claude-opus-5) doesn't trip the request
+        # timeout: each token resets the read clock, so long generations finish
+        # while a genuinely dead connection still fails fast.
+        with client.messages.stream(**base, **extra) as stream:
+            msg = stream.get_final_message()
+        return "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+
     try:
-        msg = client.messages.create(**base, thinking={"type": "disabled"})
+        return _stream(thinking={"type": "disabled"})
     except Exception as exc:  # noqa: BLE001
         # Only retry (a second billed call) when the model specifically rejected
         # disabling thinking — never on rate limits, timeouts, or other errors.
         if "thinking" in str(exc).lower():
-            msg = client.messages.create(**base)
-        else:
-            raise
-    return "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+            return _stream()
+        raise
 
 
 def _complete_json(system: str, user: str) -> dict:
@@ -204,6 +211,13 @@ def _parse_json(text: str) -> dict:
 # --------------------------------------------------------------------------- #
 # Prompts
 # --------------------------------------------------------------------------- #
+_LANG_NAMES = {"ar": "Arabic", "en": "English"}
+
+
+def _lang_name(code: str | None) -> str:
+    return _LANG_NAMES.get((code or "ar").strip().lower()[:2], "Arabic")
+
+
 ANALYSIS_SYSTEM_PROMPT = """You are an expert grant/program officer assisting a \
 nonprofit funding organization in the GCC (Saudi Arabia). You analyze project \
 applications from nonprofit organizations and produce a rigorous, neutral, \
@@ -211,42 +225,47 @@ evidence-based assessment to help a human reviewer decide.
 
 You do NOT make funding decisions. You surface information. Be specific and \
 reference the application content. When information is missing, say so \
-explicitly rather than assuming. Applications may be written in Arabic or \
-English; write every string field in the SAME language as the application.
+explicitly rather than assuming.
+
+LANGUAGE — CRITICAL: Write EVERY human-readable string in {language}. That
+includes summary, category, each criterion's "name" AND "rationale", every
+risk title/detail, missing_information, suggested_questions, strengths, and
+recommendation_rationale. Do NOT answer in any other language, regardless of
+the application's language. The ONLY fields that must stay as exact English
+tokens are the enums: "severity" (low|medium|high) and
+"preliminary_recommendation" (approve|request_changes|reject).
+
+Score these SIX criteria (translate each name into {language}): Relevance &
+Alignment; Impact & Beneficiaries; Feasibility & Plan; Budget Clarity;
+Sustainability; Organizational Capacity.
 
 Return ONLY a valid JSON object (no markdown fences) matching this schema:
-{
+{{
   "summary": string,                       // 3-5 sentence neutral summary
   "category": string,                      // e.g. Education, Health, Environment, Economic Empowerment, Relief, Social, Other
-  "extracted_fields": {
+  "extracted_fields": {{
      "estimated_beneficiaries": number|null,
      "estimated_budget": number|null,
-     "currency": string|null,              // e.g. "SAR"
+     "currency": string|null,
      "duration_months": number|null,
      "geography": string|null
-  },
-  "criteria": [                            // score EACH of these six criteria
-     { "name": "Relevance & Alignment", "score": number, "rationale": string },
-     { "name": "Impact & Beneficiaries", "score": number, "rationale": string },
-     { "name": "Feasibility & Plan", "score": number, "rationale": string },
-     { "name": "Budget Clarity", "score": number, "rationale": string },
-     { "name": "Sustainability", "score": number, "rationale": string },
-     { "name": "Organizational Capacity", "score": number, "rationale": string }
-  ],                                       // each score is 0-100
-  "risks": [ { "title": string, "severity": "low"|"medium"|"high", "detail": string } ],
-  "missing_information": [ string ],       // concrete gaps a reviewer should ask about
-  "suggested_questions": [ string ],       // questions the reviewer should pose to the applicant
+  }},
+  "criteria": [ {{ "name": string, "score": number, "rationale": string }} ],  // exactly the six criteria above, each 0-100
+  "risks": [ {{ "title": string, "severity": "low"|"medium"|"high", "detail": string }} ],
+  "missing_information": [ string ],
+  "suggested_questions": [ string ],
   "strengths": [ string ],
   "preliminary_score": number,             // 0-100 holistic readiness (NOT a decision)
-  "preliminary_recommendation": "approve"|"request_changes"|"reject",  // advisory only
+  "preliminary_recommendation": "approve"|"request_changes"|"reject",
   "recommendation_rationale": string
-}
+}}
 """
 
 CHAT_SYSTEM_PROMPT = """You are a helpful assistant answering a reviewer's \
 questions about a specific nonprofit project application. Answer ONLY from the \
 provided application data and document excerpts. If the answer is not present, \
-say you don't have that information. Reply in the reviewer's language. Be concise."""
+say you don't have that information. Be concise. Write your answer in \
+{language}, regardless of the language of the question or the documents."""
 
 
 def _build_analysis_input(project: dict, context_chunks: list[str]) -> str:
@@ -260,18 +279,27 @@ def _build_analysis_input(project: dict, context_chunks: list[str]) -> str:
     )
 
 
-def analyze_project(project: dict, context_chunks: list[str]) -> dict:
-    """Run the structured LLM analysis. Returns parsed JSON + model name."""
-    data = _complete_json(ANALYSIS_SYSTEM_PROMPT, _build_analysis_input(project, context_chunks))
+def analyze_project(
+    project: dict, context_chunks: list[str], language: str = "ar"
+) -> dict:
+    """Run the structured LLM analysis. Returns parsed JSON + model name.
+
+    `language` ("ar" | "en") controls the language of every human-readable field.
+    """
+    system = ANALYSIS_SYSTEM_PROMPT.format(language=_lang_name(language))
+    data = _complete_json(system, _build_analysis_input(project, context_chunks))
     data["_model"] = settings.ai_model_name
     return data
 
 
-def answer_question(project: dict, question: str, context_chunks: list[str]) -> str:
+def answer_question(
+    project: dict, question: str, context_chunks: list[str], language: str = "ar"
+) -> str:
     context = "\n\n".join(f"[Excerpt {i + 1}]\n{c}" for i, c in enumerate(context_chunks))
     user = (
         f"APPLICATION:\n{json.dumps(project, ensure_ascii=False, indent=2)}\n\n"
         f"DOCUMENT EXCERPTS:\n{context or '(none)'}\n\n"
         f"QUESTION: {question}"
     )
-    return _complete_text(CHAT_SYSTEM_PROMPT, user)
+    system = CHAT_SYSTEM_PROMPT.format(language=_lang_name(language))
+    return _complete_text(system, user)

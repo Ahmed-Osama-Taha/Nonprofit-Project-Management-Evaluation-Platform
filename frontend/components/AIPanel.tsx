@@ -17,7 +17,7 @@ export function AIPanel({
   canRerun?: boolean;
   onRerun?: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -25,7 +25,7 @@ export function AIPanel({
     setBusy(true);
     setErr("");
     try {
-      await api.analyzeProject(projectId);
+      await api.analyzeProject(projectId, lang);
       onRerun?.();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");

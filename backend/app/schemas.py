@@ -195,6 +195,7 @@ class AuditLogOut(ORMModel):
 # ── AI chat (RAG assistant) ──────────────────────────────────
 class ChatRequest(BaseModel):
     question: str
+    language: str = "ar"
 
 
 class ChatResponse(BaseModel):
