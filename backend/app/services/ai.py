@@ -143,16 +143,23 @@ def _anthropic_text(system: str, user: str) -> str:
         system=system,
         messages=[{"role": "user", "content": user}],
     )
+
+    def _stream(**extra) -> str:
+        # Stream so a slow model (e.g. claude-opus-5) doesn't trip the request
+        # timeout: each token resets the read clock, so long generations finish
+        # while a genuinely dead connection still fails fast.
+        with client.messages.stream(**base, **extra) as stream:
+            msg = stream.get_final_message()
+        return "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+
     try:
-        msg = client.messages.create(**base, thinking={"type": "disabled"})
+        return _stream(thinking={"type": "disabled"})
     except Exception as exc:  # noqa: BLE001
         # Only retry (a second billed call) when the model specifically rejected
         # disabling thinking — never on rate limits, timeouts, or other errors.
         if "thinking" in str(exc).lower():
-            msg = client.messages.create(**base)
-        else:
-            raise
-    return "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+            return _stream()
+        raise
 
 
 def _complete_json(system: str, user: str) -> dict:
