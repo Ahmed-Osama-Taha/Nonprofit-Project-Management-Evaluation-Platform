@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api import admin, analytics, auth, notifications, projects, reviews
 from app.core.config import settings
@@ -63,10 +64,23 @@ app.add_middleware(
 @app.middleware("http")
 async def audit_middleware(request: Request, call_next):
     """Journal every authenticated API request to the DB + S3, and stamp a
-    correlation id on the response. Auditing failures never break the request."""
+    correlation id on the response. Auditing failures never break the request.
+
+    Any unhandled downstream exception is converted here into a JSON 500 that
+    still carries CORS headers — otherwise the browser masks the real error as
+    an opaque "NetworkError" (this middleware sits outside CORSMiddleware, which
+    does not add headers to responses produced from an exception)."""
     request_id = str(uuid.uuid4())
     started = time.perf_counter()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception:  # noqa: BLE001 — surface a real, CORS-headed error
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error. See backend logs."},
+        )
+        response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["X-Request-ID"] = request_id
 
     path = request.url.path
