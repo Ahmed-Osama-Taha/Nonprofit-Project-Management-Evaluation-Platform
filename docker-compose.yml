@@ -91,11 +91,15 @@ services:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        # Empty = the browser calls the SAME origin (/api/*), which the Next
+        # server proxies to the backend. This makes ngrok / reverse proxies work
+        # with a single tunnel to port 3000 — no CORS, no mixed content.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL-}
+        API_PROXY_TARGET: ${API_PROXY_TARGET:-http://backend:8000}
     depends_on:
       - backend
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      API_PROXY_TARGET: ${API_PROXY_TARGET:-http://backend:8000}
     ports:
       - "3000:3000"
 

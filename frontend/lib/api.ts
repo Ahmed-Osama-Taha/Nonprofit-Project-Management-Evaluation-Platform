@@ -12,8 +12,10 @@ import type {
   User,
 } from "./types";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Empty string ("") means "same origin" — calls go to /api/* on the page's own
+// host and Next proxies them to the backend (see next.config.mjs rewrites). This
+// is what makes ngrok/reverse-proxy setups work. `??` (not `||`) so "" is kept.
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const TOKEN_KEY = "nppm_token";
 
@@ -37,7 +39,10 @@ interface RequestOptions {
 }
 
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    // Skip ngrok's free-tier browser interstitial for XHR/fetch requests.
+    "ngrok-skip-browser-warning": "true",
+  };
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
