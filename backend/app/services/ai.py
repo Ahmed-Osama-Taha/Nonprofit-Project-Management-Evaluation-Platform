@@ -121,19 +121,34 @@ def _get_llm():
     return _llm_client
 
 
+def _anthropic_text(system: str, user: str) -> str:
+    """One Claude completion → text.
+
+    Thinking is disabled: this is structured extraction, and on thinking-by-
+    default models (e.g. claude-opus-5) reasoning tokens count against
+    max_tokens and would truncate the JSON. Some models (e.g. claude-fable-5)
+    reject `thinking: disabled` — fall back to a plain call for those.
+    """
+    client = _get_llm()
+    base = dict(
+        model=settings.anthropic_model,
+        max_tokens=settings.anthropic_max_tokens,
+        system=system,
+        messages=[{"role": "user", "content": user}],
+    )
+    try:
+        msg = client.messages.create(**base, thinking={"type": "disabled"})
+    except Exception:  # noqa: BLE001 — model may not allow disabling thinking
+        msg = client.messages.create(**base)
+    return "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+
+
 def _complete_json(system: str, user: str) -> dict:
     """Single-shot completion that must return a JSON object."""
-    client = _get_llm()
     if settings.ai_provider == "anthropic":
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=settings.anthropic_max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        text = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+        text = _anthropic_text(system, user)
     else:
-        resp = client.chat.completions.create(
+        resp = _get_llm().chat.completions.create(
             model=settings.ai_chat_model,
             temperature=0.2,
             response_format={"type": "json_object"},
@@ -147,16 +162,9 @@ def _complete_json(system: str, user: str) -> dict:
 
 
 def _complete_text(system: str, user: str) -> str:
-    client = _get_llm()
     if settings.ai_provider == "anthropic":
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=settings.anthropic_max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        return "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
-    resp = client.chat.completions.create(
+        return _anthropic_text(system, user)
+    resp = _get_llm().chat.completions.create(
         model=settings.ai_chat_model,
         temperature=0.2,
         messages=[

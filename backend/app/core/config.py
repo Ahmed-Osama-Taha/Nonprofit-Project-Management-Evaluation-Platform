@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_base_url: str = ""  # blank -> SDK default
     anthropic_model: str = "claude-opus-5"
-    anthropic_max_tokens: int = 4096
+    anthropic_max_tokens: int = 8000
 
     # OpenAI-compatible (optional alternative provider)
     openai_api_key: str = ""
