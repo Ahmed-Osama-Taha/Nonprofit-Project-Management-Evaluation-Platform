@@ -47,9 +47,11 @@ export function AIPanel({
           <button
             className="btn btn-secondary btn-sm"
             onClick={rerun}
-            disabled={busy}
+            disabled={busy || analysis?.status === "processing"}
           >
-            {busy ? t("common.loading") : t("proj.runAnalysis")}
+            {busy || analysis?.status === "processing"
+              ? t("common.loading")
+              : t("proj.runAnalysis")}
           </button>
         )}
       </div>
@@ -58,7 +60,10 @@ export function AIPanel({
 
       {!analysis && <p className="muted">{t("ai.notRun")}</p>}
       {analysis?.status === "processing" && (
-        <p className="muted">{t("common.loading")}</p>
+        <div className="flex">
+          <div className="spinner" />
+          <span className="muted">{t("common.loading")}</span>
+        </div>
       )}
       {analysis?.status === "failed" && (
         <div className="error">
