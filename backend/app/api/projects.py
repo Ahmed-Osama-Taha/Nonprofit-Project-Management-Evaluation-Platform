@@ -283,10 +283,11 @@ def rerun_analysis(
     project_id: str,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.reviewer, UserRole.admin)),
+    language: str = Query(default="ar", description="Output language: ar | en"),
 ) -> Project:
     project = _load_project(db, project_id)
     try:
-        analysis_service.run_analysis(db, project)
+        analysis_service.run_analysis(db, project, language)
     except AINotConfigured as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     return _load_project(db, project.id)
@@ -306,7 +307,10 @@ def chat_about_project(
     try:
         context = analysis_service.retrieve_context(db, project, payload.question)
         answer = ai.answer_question(
-            analysis_service._project_payload(project), payload.question, context
+            analysis_service._project_payload(project),
+            payload.question,
+            context,
+            payload.language,
         )
     except AINotConfigured as exc:
         raise HTTPException(status_code=503, detail=str(exc))

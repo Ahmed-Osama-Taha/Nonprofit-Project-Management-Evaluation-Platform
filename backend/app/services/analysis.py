@@ -104,8 +104,10 @@ def retrieve_context(db: Session, project: Project, query: str, k: int = 6) -> l
 _IN_FLIGHT_SECONDS = 120
 
 
-def run_analysis(db: Session, project: Project) -> AIAnalysis:
+def run_analysis(db: Session, project: Project, language: str = "ar") -> AIAnalysis:
     """Full pipeline: index -> retrieve -> analyze -> persist.
+
+    `language` ("ar" | "en") controls the language of the AI's written output.
 
     Guards against concurrent/duplicate runs: if an analysis is already
     processing (and not stale), returns it instead of firing another LLM call —
@@ -134,7 +136,7 @@ def run_analysis(db: Session, project: Project) -> AIAnalysis:
     try:
         index_project_documents(db, project)
         context = retrieve_context(db, project, RETRIEVAL_QUERY)
-        result = ai.analyze_project(_project_payload(project), context)
+        result = ai.analyze_project(_project_payload(project), context, language)
 
         analysis.status = AIAnalysisStatus.completed
         analysis.model = result.get("_model")

@@ -475,7 +475,7 @@ function ReviewActions({
 }
 
 function ChatBox({ projectId }: { projectId: string }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [q, setQ] = useState("");
   const [answer, setAnswer] = useState("");
   const [sources, setSources] = useState<string[]>([]);
@@ -488,7 +488,7 @@ function ChatBox({ projectId }: { projectId: string }) {
     setErr("");
     setAnswer("");
     try {
-      const res = await api.chat(projectId, q);
+      const res = await api.chat(projectId, q, lang);
       setAnswer(res.answer);
       setSources(res.sources);
     } catch (e) {

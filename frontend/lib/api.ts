@@ -120,8 +120,10 @@ export const api = {
     request<Project>(`/api/projects/${id}`, { method: "PATCH", body }),
   submitProject: (id: string) =>
     request<Project>(`/api/projects/${id}/submit`, { method: "POST" }),
-  analyzeProject: (id: string) =>
-    request<Project>(`/api/projects/${id}/analyze`, { method: "POST" }),
+  analyzeProject: (id: string, language = "ar") =>
+    request<Project>(`/api/projects/${id}/analyze?language=${language}`, {
+      method: "POST",
+    }),
   uploadDocument: (id: string, file: File) => {
     const fd = new FormData();
     fd.append("file", file);
@@ -129,9 +131,9 @@ export const api = {
   },
   downloadDocument: (id: string, docId: string) =>
     request<{ url: string }>(`/api/projects/${id}/documents/${docId}/download`),
-  chat: (id: string, question: string) =>
+  chat: (id: string, question: string, language = "ar") =>
     request<{ answer: string; sources: string[] }>(`/api/projects/${id}/chat`, {
-      body: { question },
+      body: { question, language },
     }),
 
   // Reviews
