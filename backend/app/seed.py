@@ -1,6 +1,9 @@
-"""Idempotent demo seed: one admin, one reviewer, one organization + sample project."""
+"""Idempotent demo seed: admin + reviewer + a Saudi nonprofit and a portfolio
+of Arabic project applications across categories and workflow states."""
 
 from __future__ import annotations
+
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -30,6 +33,95 @@ def _get_or_create_user(
     return user
 
 
+# Arabic project applications — Saudi/GCC nonprofit context, budgets in SAR.
+_PROJECTS: list[dict] = [
+    {
+        "title": "تعليم رقمي للمدارس الريفية",
+        "summary": "تجهيز 10 مدارس ريفية بمعامل تعلم رقمية وتدريب المعلمين.",
+        "category": "التعليم",
+        "status": ProjectStatus.submitted,
+        "problem_statement": "تفتقر المدارس الريفية في المنطقة المستهدفة إلى الحواسيب والاتصال بالإنترنت، ما يحرم الطلاب من المهارات الرقمية الأساسية اللازمة للتعليم والعمل.",
+        "goals": "1) إنشاء 10 معامل حاسب آلي. 2) تدريب 60 معلماً. 3) تقديم منهج للمهارات الرقمية لـ 3000 طالب في السنة الأولى.",
+        "kpis": "عدد المعامل التشغيلية، عدد المعلمين المعتمدين، عدد الطلاب المكملين للمنهج، نسبة الحضور.",
+        "target_beneficiaries": 3000,
+        "beneficiary_description": "طلاب من عمر 10-16 عاماً ومعلموهم في 10 مدارس ريفية.",
+        "requested_budget": 900000,
+        "duration_months": 12,
+        "location": "منطقة عسير",
+    },
+    {
+        "title": "قوافل المياه النظيفة",
+        "summary": "حفر آبار وتركيب محطات تنقية لخدمة القرى النائية.",
+        "category": "الإغاثة",
+        "status": ProjectStatus.approved,
+        "problem_statement": "تعاني عدة قرى نائية من شح مصادر المياه الصالحة للشرب واعتمادها على مصادر ملوّثة.",
+        "goals": "حفر 8 آبار وتركيب 8 محطات تنقية وتوفير مياه نظيفة لـ 12 قرية.",
+        "kpis": "عدد الآبار العاملة، لترات المياه المنتجة يومياً، عدد المستفيدين، انخفاض الأمراض المنقولة بالمياه.",
+        "target_beneficiaries": 8000,
+        "beneficiary_description": "سكان 12 قرية نائية.",
+        "requested_budget": 1250000,
+        "duration_months": 10,
+        "location": "منطقة جازان",
+    },
+    {
+        "title": "تمكين اقتصادي للأسر المنتجة",
+        "summary": "تدريب وتمويل صغير لدعم الأسر المنتجة وربطها بالأسواق.",
+        "category": "التمكين الاقتصادي",
+        "status": ProjectStatus.under_review,
+        "problem_statement": "تمتلك كثير من الأسر مهارات إنتاجية لكنها تفتقر إلى التمويل والتسويق للوصول إلى الأسواق.",
+        "goals": "تدريب 400 أسرة، وتقديم قروض حسنة صغيرة، وربطها بمنصات بيع إلكترونية.",
+        "kpis": "عدد الأسر المدرّبة، متوسط الدخل الشهري، عدد المشاريع المستمرة بعد سنة.",
+        "target_beneficiaries": 400,
+        "beneficiary_description": "أسر منتجة بقيادة نساء في الأحياء ذات الدخل المحدود.",
+        "requested_budget": 600000,
+        "duration_months": 12,
+        "location": "مدينة الرياض",
+    },
+    {
+        "title": "رعاية صحية متنقلة",
+        "summary": "عيادات متنقلة لتقديم الرعاية الأولية والفحوصات في المناطق النائية.",
+        "category": "الصحة",
+        "status": ProjectStatus.draft,
+        "problem_statement": "بُعد المراكز الصحية عن التجمعات السكانية النائية يحدّ من وصول الخدمات الوقائية.",
+        "goals": "تشغيل 3 عيادات متنقلة وتقديم 20 ألف زيارة رعاية أولية سنوياً.",
+        "kpis": "عدد الزيارات، عدد حالات الاكتشاف المبكر، رضا المستفيدين.",
+        "target_beneficiaries": 20000,
+        "beneficiary_description": "سكان التجمعات النائية وكبار السن.",
+        "requested_budget": 1800000,
+        "duration_months": 18,
+        "location": "منطقة تبوك",
+    },
+    {
+        "title": "برنامج دعم ورعاية الأيتام",
+        "summary": "كفالة تعليمية ونفسية واجتماعية للأيتام وأسرهم.",
+        "category": "اجتماعي",
+        "status": ProjectStatus.changes_requested,
+        "problem_statement": "يحتاج الأيتام إلى دعم متكامل يتجاوز الجانب المالي ليشمل التعليم والصحة النفسية.",
+        "goals": "كفالة 500 يتيم، وبرامج دعم نفسي، ومتابعة تعليمية دورية.",
+        "kpis": "عدد المكفولين، التحصيل الدراسي، مؤشرات الصحة النفسية.",
+        "target_beneficiaries": 500,
+        "beneficiary_description": "أيتام في عمر المدرسة وأسرهم الحاضنة.",
+        "requested_budget": 750000,
+        "duration_months": 12,
+        "location": "مدينة جدة",
+    },
+    {
+        "title": "حاضنة مشاريع الشباب",
+        "summary": "حاضنة أعمال لتأهيل رواد الأعمال الشباب وتسريع مشاريعهم.",
+        "category": "التمكين الاقتصادي",
+        "status": ProjectStatus.submitted,
+        "problem_statement": "يواجه الشباب صعوبة في تحويل أفكارهم إلى مشاريع قابلة للنمو بسبب نقص الإرشاد والتمويل.",
+        "goals": "تأهيل 200 رائد أعمال، واحتضان 40 مشروعاً، وربطهم بالمستثمرين.",
+        "kpis": "عدد المشاريع المحتضنة، الوظائف المستحدثة، حجم التمويل المُجتذب.",
+        "target_beneficiaries": 200,
+        "beneficiary_description": "شباب من الجنسين في عمر 20-35 عاماً.",
+        "requested_budget": 1100000,
+        "duration_months": 14,
+        "location": "المنطقة الشرقية",
+    },
+]
+
+
 def seed() -> None:
     if not settings.seed_on_startup:
         return
@@ -37,19 +129,19 @@ def seed() -> None:
     try:
         _get_or_create_user(
             db, settings.seed_admin_email, settings.seed_admin_password,
-            "Platform Admin", UserRole.admin,
+            "مشرف المنصة", UserRole.admin,
         )
         _get_or_create_user(
             db, settings.seed_reviewer_email, settings.seed_reviewer_password,
-            "Internal Reviewer", UserRole.reviewer,
+            "مراجع داخلي", UserRole.reviewer,
         )
 
-        org = db.scalar(select(Organization).where(Organization.name == "Hope Foundation"))
+        org = db.scalar(select(Organization).where(Organization.name == "مؤسسة عطاء الخيرية"))
         if not org:
             org = Organization(
-                name="Hope Foundation",
-                description="Community development NGO focused on education and relief.",
-                country="Jordan",
+                name="مؤسسة عطاء الخيرية",
+                description="منظمة غير ربحية تعمل في التعليم والإغاثة والتمكين الاقتصادي.",
+                country="المملكة العربية السعودية",
                 website="https://example.org",
             )
             db.add(org)
@@ -57,37 +149,37 @@ def seed() -> None:
 
         org_user = _get_or_create_user(
             db, settings.seed_org_email, settings.seed_org_password,
-            "Org Manager", UserRole.organization, organization_id=org.id,
+            "مدير المنظمة", UserRole.organization, organization_id=org.id,
         )
 
         existing = db.scalar(select(Project).where(Project.organization_id == org.id))
         if not existing:
-            db.add(
-                Project(
-                    title="Digital Literacy for Rural Schools",
-                    summary="Equip 10 rural schools with digital learning labs and teacher training.",
-                    category="Education",
-                    status=ProjectStatus.draft,
-                    problem_statement=(
-                        "Rural schools in the target region lack access to computers and "
-                        "internet, leaving students without basic digital skills required "
-                        "for further education and employment."
-                    ),
-                    goals=(
-                        "1) Establish 10 computer labs. 2) Train 60 teachers. "
-                        "3) Deliver a digital literacy curriculum to 3,000 students in year one."
-                    ),
-                    kpis="# labs operational, # teachers certified, # students completing curriculum, attendance rate",
-                    target_beneficiaries=3000,
-                    beneficiary_description="Students aged 10-16 and their teachers in 10 rural schools.",
-                    requested_budget=250000,
-                    currency="USD",
-                    duration_months=12,
-                    location="Northern rural districts",
-                    organization_id=org.id,
-                    owner_id=org_user.id,
+            now = datetime.now(timezone.utc)
+            for spec in _PROJECTS:
+                status = spec["status"]
+                submitted = status != ProjectStatus.draft
+                decided = status in (ProjectStatus.approved, ProjectStatus.rejected)
+                db.add(
+                    Project(
+                        title=spec["title"],
+                        summary=spec["summary"],
+                        category=spec["category"],
+                        status=status,
+                        problem_statement=spec["problem_statement"],
+                        goals=spec["goals"],
+                        kpis=spec["kpis"],
+                        target_beneficiaries=spec["target_beneficiaries"],
+                        beneficiary_description=spec["beneficiary_description"],
+                        requested_budget=spec["requested_budget"],
+                        currency=settings.default_currency,
+                        duration_months=spec["duration_months"],
+                        location=spec["location"],
+                        submitted_at=now if submitted else None,
+                        decided_at=now if decided else None,
+                        organization_id=org.id,
+                        owner_id=org_user.id,
+                    )
                 )
-            )
 
         db.commit()
     finally:
