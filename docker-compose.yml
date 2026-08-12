@@ -58,8 +58,9 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5}
       # Embeddings are pluggable; "local" needs no external key (works with only Claude).
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
-      AI_EMBEDDING_DIM: ${AI_EMBEDDING_DIM:-1536}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-st}
+      AI_ST_MODEL: ${AI_ST_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      AI_EMBEDDING_DIM: ${AI_EMBEDDING_DIM:-384}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       AI_CHAT_MODEL: ${AI_CHAT_MODEL:-gpt-4o-mini}

@@ -14,6 +14,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pre-cache the default multilingual embedding model so the first analysis does
+# not cold-download it at runtime. Best-effort: if the build host has no network
+# the model is fetched on first use instead.
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')" || true
+
 COPY . .
 
 EXPOSE 8000

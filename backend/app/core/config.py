@@ -50,12 +50,18 @@ class Settings(BaseSettings):
     ai_chat_model: str = "gpt-4o-mini"
 
     # Embeddings are pluggable and independent of the chat provider.
-    #   "local"  -> deterministic hashing embedding, works offline with only a
-    #               Claude key (Anthropic has no embeddings endpoint).
-    #   "openai" -> OpenAI embeddings API (requires openai_api_key).
-    embedding_provider: str = "local"
+    #   "st"     -> local multilingual sentence-transformer (SEMANTIC, offline,
+    #               Arabic-capable). Default: real semantic retrieval, no external
+    #               key. Downloads the model on first use.
+    #   "local"  -> deterministic hashing embedding (lexical, zero-dependency
+    #               fallback; works with no ML libs installed).
+    #   "openai" -> hosted OpenAI embeddings API (requires openai_api_key).
+    # NOTE: ai_embedding_dim MUST match the active provider's output dimension —
+    #   st (paraphrase-multilingual-MiniLM-L12-v2)=384, openai(3-small)=1536.
+    embedding_provider: str = "st"
+    ai_st_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     ai_embedding_model: str = "text-embedding-3-small"
-    ai_embedding_dim: int = 1536
+    ai_embedding_dim: int = 384
 
     # Seed
     seed_on_startup: bool = True

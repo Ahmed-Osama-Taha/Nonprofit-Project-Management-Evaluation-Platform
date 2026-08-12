@@ -13,6 +13,8 @@ python-multipart==0.0.20
 boto3==1.35.90
 anthropic==0.69.0
 openai==1.59.6
+# Local multilingual SEMANTIC embeddings for RAG (default provider = "st").
+sentence-transformers==3.3.1
 pypdf==5.1.0
 python-docx==1.1.2
 httpx==0.28.1

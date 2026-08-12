@@ -70,9 +70,10 @@ PostgreSQL **and** shipped to object storage.
 - **Bilingual, RTL‑first UI** — Arabic (default) and English, switchable live; the
   whole layout flips direction. Saudi‑green theme, light + dark, no UI libraries.
 - **Claude as the LLM** — Anthropic Claude via the official SDK (OpenAI‑compatible
-  provider also supported). Embeddings are **pluggable**: a local hashing embedder
-  lets the RAG pipeline run with **only a Claude key** (Anthropic has no
-  embeddings endpoint).
+  provider also supported). Embeddings are **pluggable**: the default is a **local
+  multilingual sentence‑transformer** (semantic, offline, Arabic‑capable), with a
+  zero‑dependency hashing embedder and hosted OpenAI as alternatives — so the RAG
+  pipeline runs with **only a Claude key** (Anthropic has no embeddings endpoint).
 - **Reviewer analytics** — a dashboard (status/category breakdowns, budget totals
   in SAR, AI‑readiness score buckets, risk distribution, and a prioritised review
   queue) so reviewers decide from data, not just chat.
@@ -130,7 +131,7 @@ async workers without a rewrite. Full rationale in
 | ORM            | SQLAlchemy 2.0                               | Modern typed models |
 | Database       | PostgreSQL 16 + **pgvector**                 | Relational data + embeddings in one store |
 | LLM            | **Anthropic Claude** (OpenAI-compatible opt) | Structured, advisory analysis |
-| Embeddings     | Pluggable — local hashing / OpenAI           | RAG works with only a Claude key |
+| Embeddings     | Pluggable — local **semantic** (multilingual ST) / hashing / OpenAI | Real semantic RAG, offline, with only a Claude key |
 | Object storage | S3 / MinIO                                    | Documents + durable audit journal |
 | DB viewer      | Adminer                                       | Zero-config database inspection |
 | Auth           | JWT + bcrypt, role-based access              | Stateless, standard |
@@ -205,7 +206,7 @@ The platform runs fully **without** a key — AI features simply return a clear
    AI_PROVIDER=anthropic
    ANTHROPIC_API_KEY=sk-ant-...
    ANTHROPIC_MODEL=claude-opus-5     # or claude-sonnet-5, claude-haiku-4-5, ...
-   EMBEDDING_PROVIDER=local          # no extra key needed; RAG works offline
+   EMBEDDING_PROVIDER=st             # semantic multilingual embeddings, no extra key
    ```
 2. Restart: `docker compose up -d --build backend`.
 3. Verify: `curl http://localhost:8000/api/health` → `"ai_enabled": true`.
@@ -215,10 +216,15 @@ get a structured scorecard, risks, missing info, suggested questions, and an
 advisory recommendation — and the reviewer dashboard's AI‑score columns light up.
 
 **Notes**
-- **Embeddings.** Anthropic has no embeddings endpoint, so `EMBEDDING_PROVIDER=local`
-  uses a deterministic hashing embedder — the whole RAG pipeline (chunk → embed →
-  pgvector → retrieve) works with only a Claude key. Set `EMBEDDING_PROVIDER=openai`
-  (+ `OPENAI_API_KEY`) to use a hosted embeddings model instead.
+- **Embeddings (semantic RAG).** Anthropic has no embeddings endpoint, so the
+  embedder is decoupled from the LLM. The default `EMBEDDING_PROVIDER=st` runs a
+  local **multilingual sentence‑transformer** (`paraphrase-multilingual-MiniLM-L12-v2`,
+  384‑d) — real **semantic** retrieval, offline, Arabic‑capable, no extra key.
+  `local` falls back to a deterministic **hashing** embedder (lexical, needs no ML
+  libs); `openai` uses a hosted model. **If you change the provider/model, the
+  vector dimension changes** (`st`=384, `openai`=1536) — run
+  `python -m app.reindex` in the backend to rebuild the chunk index (and add an
+  HNSW ANN index). `AI_EMBEDDING_DIM` must match the active provider.
 - **OpenAI‑compatible provider.** Set `AI_PROVIDER=openai` with `OPENAI_API_KEY` /
   `OPENAI_BASE_URL` / `AI_CHAT_MODEL` to route the LLM through OpenAI or any
   compatible gateway.
@@ -241,8 +247,9 @@ All settings are environment variables (see [`.env.example`](.env.example)).
 | `AI_PROVIDER` | `anthropic` | `anthropic` or `openai` |
 | `ANTHROPIC_API_KEY` | *(empty)* | Enables AI when set |
 | `ANTHROPIC_MODEL` | `claude-opus-5` | Claude model id |
-| `EMBEDDING_PROVIDER` | `local` | `local` (no key) or `openai` |
-| `AI_EMBEDDING_DIM` | `1536` | Embedding vector dimension (pgvector column) |
+| `EMBEDDING_PROVIDER` | `st` | `st` (local semantic, multilingual), `local` (hashing), or `openai` |
+| `AI_ST_MODEL` | `…MiniLM-L12-v2` | Sentence-transformer model for `st` |
+| `AI_EMBEDDING_DIM` | `384` | Embedding vector dimension — must match provider (`st`=384, `openai`=1536) |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `AI_CHAT_MODEL` | — | OpenAI-compatible provider |
 | `SEED_ON_STARTUP` | `true` | Seed demo data on first boot |
 | `SEED_*_EMAIL` / `SEED_*_PASSWORD` | demo creds | Demo account overrides |

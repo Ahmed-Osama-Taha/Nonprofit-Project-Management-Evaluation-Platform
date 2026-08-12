@@ -63,6 +63,28 @@ def _local_embed(text: str) -> list[float]:
     return [v / norm for v in vec]
 
 
+_st_model_obj = None
+
+
+def _st_embed_texts(texts: list[str]) -> list[list[float]]:
+    """Local multilingual **semantic** embeddings via sentence-transformers.
+
+    The default provider. `paraphrase-multilingual-MiniLM-L12-v2` is a symmetric
+    model, so the same encoding is used for passages and queries — no query/
+    passage prefix needed (e5/bge models would require one). Vectors are
+    L2-normalised so pgvector cosine distance is a true semantic similarity.
+    """
+    global _st_model_obj
+    if _st_model_obj is None:
+        from sentence_transformers import SentenceTransformer
+
+        _st_model_obj = SentenceTransformer(settings.ai_st_model)
+    vecs = _st_model_obj.encode(
+        texts, normalize_embeddings=True, convert_to_numpy=True
+    )
+    return [v.tolist() for v in vecs]
+
+
 def _openai_embed_texts(texts: list[str]) -> list[list[float]]:
     global _openai_embed_client
     if not settings.openai_api_key:
@@ -84,8 +106,11 @@ def _openai_embed_texts(texts: list[str]) -> list[list[float]]:
 def embed_texts(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
-    if settings.embedding_provider == "openai":
+    provider = settings.embedding_provider
+    if provider == "openai":
         return _openai_embed_texts(texts)
+    if provider == "st":
+        return _st_embed_texts(texts)
     return [_local_embed(t) for t in texts]
 
 

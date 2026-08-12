@@ -19,6 +19,8 @@ os.environ.setdefault(
     ),
 )
 os.environ["OPENAI_API_KEY"] = ""
+# Tests use the zero-dependency hashing embedder so CI never downloads a model.
+os.environ["EMBEDDING_PROVIDER"] = "local"
 os.environ["S3_ENDPOINT_URL"] = "https://s3.us-east-1.amazonaws.com"
 os.environ["S3_PUBLIC_ENDPOINT_URL"] = "https://s3.us-east-1.amazonaws.com"
 os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
