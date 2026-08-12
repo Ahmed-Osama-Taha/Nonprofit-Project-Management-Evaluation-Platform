@@ -371,10 +371,23 @@ Phase 2B target architecture will address, and stating them plainly is what
 lets the "current vs. target" comparison be credible.
 ```
 
+## Polished Lucid diagrams
+
+The three CURRENT views have been rendered as a polished, styled Lucid document
+(one page per view — System Context, Container, Deployment):
+
+- **Lucid document (view):** https://lucid.app/lucidchart/0a1d6b80-1fa8-4c69-b855-3d29e20060c1/view
+- **Lucid document (edit):** https://lucid.app/lucidchart/0a1d6b80-1fa8-4c69-b855-3d29e20060c1/edit
+
+Styling follows the classification legend: **verified** = blue fill / blue
+border, **external** = grey, **persons/actors** = purple, **volumes** = amber
+(with backup gaps flagged), **async/external** edges = dashed. Trust boundary
+and the single Docker host are drawn as containers.
+
 ## Diagram source-of-truth note
 
 The Mermaid blocks above render directly in GitHub and are the
-version-controlled source of truth. The `Lucid-ready build spec` blocks are a
-faithful, structured transcription intended to drive polished Lucid C4 diagrams
-(System Context, Container, Deployment) with consistent styling once the Lucid
-connector is available. No information differs between the two representations.
+version-controlled source of truth. The `Lucid-ready build spec` blocks are the
+faithful, structured transcription that produced the Lucid document linked
+above. No information differs between the three representations (Mermaid,
+Lucid, spec).
