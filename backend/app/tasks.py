@@ -39,6 +39,8 @@ def run_analysis_task(project_id: str, language: str = "ar") -> None:
     try:
         project = db.get(Project, project_id)
         if project:
-            analysis_service.run_analysis(db, project, language)
+            # force=True: the API pre-marked the row "processing" for instant UI
+            # feedback; the broker already dedupes, so run past the guard.
+            analysis_service.run_analysis(db, project, language, force=True)
     finally:
         db.close()

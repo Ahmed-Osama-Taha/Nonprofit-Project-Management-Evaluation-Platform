@@ -34,6 +34,14 @@ function Detail() {
     load();
   }, [load]);
 
+  // Live-update the AI analysis: while it's processing (worker running), poll
+  // every 4s so the result appears without a manual page refresh.
+  useEffect(() => {
+    if (p?.ai_analysis?.status !== "processing") return;
+    const timer = setInterval(load, 4000);
+    return () => clearInterval(timer);
+  }, [p?.ai_analysis?.status, load]);
+
   if (loading)
     return (
       <div className="center-page">

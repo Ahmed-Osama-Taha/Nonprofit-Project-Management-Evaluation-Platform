@@ -104,7 +104,9 @@ def retrieve_context(db: Session, project: Project, query: str, k: int = 6) -> l
 _IN_FLIGHT_SECONDS = 120
 
 
-def run_analysis(db: Session, project: Project, language: str = "ar") -> AIAnalysis:
+def run_analysis(
+    db: Session, project: Project, language: str = "ar", force: bool = False
+) -> AIAnalysis:
     """Full pipeline: index -> retrieve -> analyze -> persist.
 
     `language` ("ar" | "en") controls the language of the AI's written output.
@@ -112,12 +114,14 @@ def run_analysis(db: Session, project: Project, language: str = "ar") -> AIAnaly
     Guards against concurrent/duplicate runs: if an analysis is already
     processing (and not stale), returns it instead of firing another LLM call —
     so repeated "Run" clicks or a submit+manual race can't stack API spend.
+    `force=True` (used by the queue worker, which the broker already dedupes)
+    bypasses that guard so a row pre-marked "processing" by the API still runs.
     """
     analysis = db.scalar(
         select(AIAnalysis).where(AIAnalysis.project_id == project.id)
     )
 
-    if analysis is not None and analysis.status == AIAnalysisStatus.processing:
+    if not force and analysis is not None and analysis.status == AIAnalysisStatus.processing:
         updated = analysis.updated_at
         if updated is not None:
             if updated.tzinfo is None:

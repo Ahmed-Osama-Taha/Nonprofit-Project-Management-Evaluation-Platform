@@ -19,6 +19,8 @@ from app.api.deps import get_current_user, require_roles
 from app.core.config import settings
 from app.core.db import SessionLocal, get_db
 from app.models import (
+    AIAnalysis,
+    AIAnalysisStatus,
     Document,
     Project,
     ProjectStatus,
@@ -94,17 +96,28 @@ def _run_analysis_background(project_id: str) -> None:
         db.close()
 
 
-def _enqueue_analysis(
-    project_id: str, background: BackgroundTasks, language: str = "ar"
+def _start_analysis(
+    db: Session, project: Project, background: BackgroundTasks, language: str = "ar"
 ) -> None:
-    """Enqueue analysis to the dramatiq worker when a broker is configured;
-    otherwise run it in-process via BackgroundTasks (dev/test)."""
+    """Kick off analysis. With a broker: mark the analysis row `processing`
+    immediately (so the UI shows a spinner and can poll) and enqueue the heavy
+    work to the dramatiq worker. Without a broker: run in-process (dev/test)."""
     if settings.rabbitmq_url:
+        analysis = db.scalar(
+            select(AIAnalysis).where(AIAnalysis.project_id == project.id)
+        )
+        if analysis is None:
+            analysis = AIAnalysis(project_id=project.id)
+            db.add(analysis)
+        analysis.status = AIAnalysisStatus.processing
+        analysis.error = None
+        db.commit()
+
         from app.tasks import run_analysis_task
 
-        run_analysis_task.send(project_id, language)
+        run_analysis_task.send(project.id, language)
     else:
-        background.add_task(_run_analysis_background, project_id)
+        background.add_task(_run_analysis_background, project.id)
 
 
 # ── List / create ────────────────────────────────────────────
@@ -288,18 +301,25 @@ def submit_project(
     db.commit()
 
     # Kick off AI analysis asynchronously so submission stays fast.
-    _enqueue_analysis(project.id, background)
+    _start_analysis(db, project, background)
     return _load_project(db, project.id)
 
 
 @router.post("/{project_id}/analyze", response_model=ProjectDetailOut)
 def rerun_analysis(
     project_id: str,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.reviewer, UserRole.admin)),
     language: str = Query(default="ar", description="Output language: ar | en"),
 ) -> Project:
     project = _load_project(db, project_id)
+    # With a broker, enqueue and return immediately (status = processing) so the
+    # reviewer's request never blocks on a slow model; the UI polls for the
+    # result. Without a broker, run synchronously (dev/test).
+    if settings.rabbitmq_url:
+        _start_analysis(db, project, background, language)
+        return _load_project(db, project.id)
     try:
         analysis_service.run_analysis(db, project, language)
     except AINotConfigured as exc:
