@@ -12,6 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+# Install the CPU-only build of torch FIRST so sentence-transformers reuses it
+# instead of pulling the multi-GB CUDA/NCCL packages (this app does CPU
+# inference only). This keeps the image ~2.5 GB smaller.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Optional observability deps (OpenTelemetry / Prometheus). Best-effort so the
