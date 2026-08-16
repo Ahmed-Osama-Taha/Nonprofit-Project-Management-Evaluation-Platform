@@ -14,6 +14,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Optional observability deps (OpenTelemetry / Prometheus). Best-effort so the
+# base image still builds if a version can't resolve; the app no-ops unless
+# OTEL_ENABLED=true.
+COPY requirements-observability.txt .
+RUN pip install --no-cache-dir -r requirements-observability.txt || true
+
 # Pre-cache the default multilingual embedding model so the first analysis does
 # not cold-download it at runtime. Best-effort: if the build host has no network
 # the model is fetched on first use instead.

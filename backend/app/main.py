@@ -175,9 +175,15 @@ app.include_router(notifications.router)
 app.include_router(admin.router)
 app.include_router(analytics.router)
 
+# OpenTelemetry / Prometheus / JSON logs — no-op unless OTEL_ENABLED=true.
+from app.observability import setup_observability  # noqa: E402
+
+setup_observability(app)
+
 
 @app.get("/api/health", tags=["health"])
 def health() -> dict:
+    """Liveness — the process is up and serving."""
     return {
         "status": "ok",
         "app": settings.app_name,
@@ -188,3 +194,43 @@ def health() -> dict:
         "embedding_provider": settings.embedding_provider,
         "audit_to_s3": settings.audit_to_s3,
     }
+
+
+@app.get("/api/health/ready", tags=["health"])
+def readiness() -> JSONResponse:
+    """Readiness — dependencies reachable. Returns 503 if a critical dep is down."""
+    from sqlalchemy import text
+
+    from app.core.redis import get_redis
+
+    checks: dict[str, bool] = {}
+
+    try:
+        db = SessionLocal()
+        try:
+            db.execute(text("SELECT 1"))
+            checks["database"] = True
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001
+        checks["database"] = False
+
+    try:
+        checks["object_storage"] = bool(storage._s3().list_buckets())
+    except Exception:  # noqa: BLE001
+        checks["object_storage"] = False
+
+    if settings.redis_url:
+        try:
+            r = get_redis()
+            checks["redis"] = bool(r and r.ping())
+        except Exception:  # noqa: BLE001
+            checks["redis"] = False
+
+    # Database is the only hard dependency for readiness; storage/redis are
+    # reported but degrade gracefully.
+    ready = checks.get("database", False)
+    return JSONResponse(
+        status_code=200 if ready else 503,
+        content={"status": "ready" if ready else "not_ready", "checks": checks},
+    )

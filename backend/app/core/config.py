@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     # in-process via FastAPI BackgroundTasks (dev/test fallback).
     rabbitmq_url: str = ""             # e.g. amqp://guest:guest@rabbitmq:5672/
 
+    # Observability (OpenTelemetry). Off by default so dev/tests need no stack;
+    # enabled in the observability compose profile. When on, the app emits
+    # traces (OTLP -> collector -> Jaeger), a Prometheus /metrics endpoint, and
+    # structured JSON logs with trace correlation.
+    otel_enabled: bool = False
+    otel_exporter_otlp_endpoint: str = ""   # e.g. http://otel-collector:4317
+    otel_service_name: str = "athar-backend"
+
     # Database
     database_url: str = "postgresql+psycopg://nppm:nppm@localhost:5432/nppm"
 
