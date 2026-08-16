@@ -1,0 +1,65 @@
+{
+  "title": "Athar — Postgres (database)",
+  "uid": "athar-postgres",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1, "title": "Postgres up", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [ { "refId": "A", "expr": "pg_up" } ]
+    },
+    {
+      "id": 2, "title": "Active connections", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "targets": [ { "refId": "A", "expr": "sum(pg_stat_database_numbackends{datname=\"nppm\"})" } ]
+    },
+    {
+      "id": 3, "title": "Cache hit ratio", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "targets": [ { "refId": "A", "expr": "sum(rate(pg_stat_database_blks_hit{datname=\"nppm\"}[5m])) / (sum(rate(pg_stat_database_blks_hit{datname=\"nppm\"}[5m])) + sum(rate(pg_stat_database_blks_read{datname=\"nppm\"}[5m])))" } ]
+    },
+    {
+      "id": 4, "title": "Database size", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [ { "refId": "A", "expr": "pg_database_size_bytes{datname=\"nppm\"}" } ]
+    },
+    {
+      "id": 5, "title": "Transactions/s (commit vs rollback)", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(pg_stat_database_xact_commit{datname=\"nppm\"}[5m]))", "legendFormat": "commit" },
+        { "refId": "B", "expr": "sum(rate(pg_stat_database_xact_rollback{datname=\"nppm\"}[5m]))", "legendFormat": "rollback" }
+      ]
+    },
+    {
+      "id": 6, "title": "Tuples/s (fetch / insert / update / delete)", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(pg_stat_database_tup_fetched{datname=\"nppm\"}[5m]))", "legendFormat": "fetched" },
+        { "refId": "B", "expr": "sum(rate(pg_stat_database_tup_inserted{datname=\"nppm\"}[5m]))", "legendFormat": "inserted" },
+        { "refId": "C", "expr": "sum(rate(pg_stat_database_tup_updated{datname=\"nppm\"}[5m]))", "legendFormat": "updated" },
+        { "refId": "D", "expr": "sum(rate(pg_stat_database_tup_deleted{datname=\"nppm\"}[5m]))", "legendFormat": "deleted" }
+      ]
+    },
+    {
+      "id": 7, "title": "Deadlocks/s", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+      "targets": [ { "refId": "A", "expr": "sum(rate(pg_stat_database_deadlocks{datname=\"nppm\"}[5m]))", "legendFormat": "deadlocks" } ]
+    }
+  ]
+}

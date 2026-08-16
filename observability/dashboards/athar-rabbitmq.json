@@ -1,0 +1,65 @@
+{
+  "title": "Athar — RabbitMQ (queues)",
+  "uid": "athar-rabbitmq",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1, "title": "Connections", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [ { "refId": "A", "expr": "sum(rabbitmq_connections)" } ]
+    },
+    {
+      "id": 2, "title": "Channels", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "targets": [ { "refId": "A", "expr": "sum(rabbitmq_channels)" } ]
+    },
+    {
+      "id": 3, "title": "Queues", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "targets": [ { "refId": "A", "expr": "sum(rabbitmq_queues)" } ]
+    },
+    {
+      "id": 4, "title": "Consumers (total)", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } }, "overrides": [] },
+      "targets": [ { "refId": "A", "expr": "sum(rabbitmq_queue_consumers)" } ]
+    },
+    {
+      "id": 5, "title": "Messages ready (backlog) by queue", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 6 },
+      "targets": [ { "refId": "A", "expr": "sum by (queue) (rabbitmq_queue_messages_ready)", "legendFormat": "{{queue}}" } ]
+    },
+    {
+      "id": 6, "title": "Messages unacked (in flight) by queue", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 6 },
+      "targets": [ { "refId": "A", "expr": "sum by (queue) (rabbitmq_queue_messages_unacked)", "legendFormat": "{{queue}}" } ]
+    },
+    {
+      "id": 7, "title": "Consumers by queue", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 15 },
+      "targets": [ { "refId": "A", "expr": "sum by (queue) (rabbitmq_queue_consumers)", "legendFormat": "{{queue}}" } ]
+    },
+    {
+      "id": 8, "title": "Publish vs deliver rate (msg/s)", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 15 },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(rabbitmq_global_messages_received_total[1m]))", "legendFormat": "published" },
+        { "refId": "B", "expr": "sum(rate(rabbitmq_global_messages_delivered_total[1m]))", "legendFormat": "delivered" }
+      ]
+    }
+  ]
+}

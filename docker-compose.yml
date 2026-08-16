@@ -59,6 +59,9 @@ services:
 
   backend:
     build: ./backend
+    # Shared image: worker builds the same context, so tag once and reuse — the
+    # image (torch + model) is built and stored a single time, not per service.
+    image: athar-backend:local
     depends_on:
       db:
         condition: service_healthy
@@ -117,8 +120,10 @@ services:
       - "8000:8000"
 
   # dramatiq worker — runs AI analysis off the request path (same codebase).
+  # Reuses the backend image (same build context) so it isn't built/stored twice.
   worker:
     build: ./backend
+    image: athar-backend:local
     command: ["dramatiq", "app.tasks", "-p", "2", "-t", "2"]
     depends_on:
       db:
