@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
@@ -16,15 +17,25 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(subject: str, role: str) -> str:
+def _encode(subject: str, role: str, token_type: str, minutes: int) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": subject,
         "role": role,
+        "type": token_type,          # "access" | "refresh"
+        "jti": uuid.uuid4().hex,      # unique id, enables server-side revocation
         "iat": now,
-        "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
+        "exp": now + timedelta(minutes=minutes),
     }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+
+def create_access_token(subject: str, role: str) -> str:
+    return _encode(subject, role, "access", settings.access_token_expire_minutes)
+
+
+def create_refresh_token(subject: str, role: str) -> str:
+    return _encode(subject, role, "refresh", settings.refresh_token_expire_minutes)
 
 
 def decode_access_token(token: str) -> dict | None:

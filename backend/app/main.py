@@ -112,6 +112,48 @@ async def audit_middleware(request: Request, call_next):
     return response
 
 
+_CSRF_EXEMPT = (
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/token",
+    "/api/auth/refresh",
+    "/api/auth/logout",
+)
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    """CSRF (double-submit) for cookie-auth mutations + baseline security headers.
+
+    CSRF is enforced only when the request is authenticated by the httpOnly
+    cookie AND carries no Bearer header — Bearer (API) clients are not CSRF-able
+    because a browser never attaches that header automatically. The strict CSP
+    is set by the Next.js frontend, which serves the HTML/JS."""
+    method = request.method
+    path = request.url.path
+    if (
+        method in ("POST", "PUT", "PATCH", "DELETE")
+        and path.startswith("/api/")
+        and not any(path.startswith(p) for p in _CSRF_EXEMPT)
+    ):
+        has_bearer = request.headers.get("authorization", "").lower().startswith("bearer ")
+        has_cookie = settings.access_cookie_name in request.cookies
+        if has_cookie and not has_bearer:
+            header_csrf = request.headers.get("x-csrf-token")
+            cookie_csrf = request.cookies.get(settings.csrf_cookie_name)
+            if not header_csrf or not cookie_csrf or header_csrf != cookie_csrf:
+                return JSONResponse(
+                    status_code=403, content={"detail": "CSRF token missing or invalid"}
+                )
+
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    return response
+
+
 def _resolve_actor(request: Request) -> User | None:
     auth_header = request.headers.get("authorization", "")
     if not auth_header.lower().startswith("bearer "):
@@ -133,9 +175,15 @@ app.include_router(notifications.router)
 app.include_router(admin.router)
 app.include_router(analytics.router)
 
+# OpenTelemetry / Prometheus / JSON logs — no-op unless OTEL_ENABLED=true.
+from app.observability import setup_observability  # noqa: E402
+
+setup_observability(app)
+
 
 @app.get("/api/health", tags=["health"])
 def health() -> dict:
+    """Liveness — the process is up and serving."""
     return {
         "status": "ok",
         "app": settings.app_name,
@@ -146,3 +194,43 @@ def health() -> dict:
         "embedding_provider": settings.embedding_provider,
         "audit_to_s3": settings.audit_to_s3,
     }
+
+
+@app.get("/api/health/ready", tags=["health"])
+def readiness() -> JSONResponse:
+    """Readiness — dependencies reachable. Returns 503 if a critical dep is down."""
+    from sqlalchemy import text
+
+    from app.core.redis import get_redis
+
+    checks: dict[str, bool] = {}
+
+    try:
+        db = SessionLocal()
+        try:
+            db.execute(text("SELECT 1"))
+            checks["database"] = True
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001
+        checks["database"] = False
+
+    try:
+        checks["object_storage"] = bool(storage._s3().list_buckets())
+    except Exception:  # noqa: BLE001
+        checks["object_storage"] = False
+
+    if settings.redis_url:
+        try:
+            r = get_redis()
+            checks["redis"] = bool(r and r.ping())
+        except Exception:  # noqa: BLE001
+            checks["redis"] = False
+
+    # Database is the only hard dependency for readiness; storage/redis are
+    # reported but degrade gracefully.
+    ready = checks.get("database", False)
+    return JSONResponse(
+        status_code=200 if ready else 503,
+        content={"status": "ready" if ready else "not_ready", "checks": checks},
+    )

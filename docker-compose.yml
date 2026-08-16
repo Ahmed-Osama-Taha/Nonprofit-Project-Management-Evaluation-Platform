@@ -32,6 +32,31 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Message broker for async AI analysis (dramatiq). Management UI on :15672.
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend:
     build: ./backend
     depends_on:
@@ -39,11 +64,27 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://nppm:nppm@db:5432/nppm}
       SECRET_KEY: ${SECRET_KEY:-dev-super-secret-change-me}
       ENVIRONMENT: ${ENVIRONMENT:-development}
-      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-720}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      # Auth cookies — httpOnly session token (XSS-safe). Set COOKIE_SECURE=true
+      # behind HTTPS in production.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+      # Redis — JWT denylist (revocation) + caching.
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      # RabbitMQ — enqueue AI analysis to the dramatiq worker.
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      # Observability — enabled via docker-compose.observability.yml.
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-athar-backend}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
       S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9000}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
@@ -58,8 +99,9 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5}
       # Embeddings are pluggable; "local" needs no external key (works with only Claude).
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
-      AI_EMBEDDING_DIM: ${AI_EMBEDDING_DIM:-1536}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-st}
+      AI_ST_MODEL: ${AI_ST_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      AI_EMBEDDING_DIM: ${AI_EMBEDDING_DIM:-384}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       AI_CHAT_MODEL: ${AI_CHAT_MODEL:-gpt-4o-mini}
@@ -73,6 +115,38 @@ services:
       SEED_ORG_PASSWORD: ${SEED_ORG_PASSWORD:-Org123!}
     ports:
       - "8000:8000"
+
+  # dramatiq worker — runs AI analysis off the request path (same codebase).
+  worker:
+    build: ./backend
+    command: ["dramatiq", "app.tasks", "-p", "2", "-t", "2"]
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      minio:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://nppm:nppm@db:5432/nppm}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-nppm-documents}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      AUDIT_TO_S3: ${AUDIT_TO_S3:-true}
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-st}
+      AI_ST_MODEL: ${AI_ST_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      AI_EMBEDDING_DIM: ${AI_EMBEDDING_DIM:-384}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
 
   # Lightweight web UI to browse/query PostgreSQL. Open http://localhost:8080
   # System: PostgreSQL · Server: db · User/Pass/DB: nppm (defaults).
@@ -106,3 +180,4 @@ services:
 volumes:
   postgres-data:
   minio-data:
+  redis-data:

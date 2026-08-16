@@ -1,0 +1,12 @@
+# Observability stack (OpenTelemetry + Prometheus + JSON logs).
+# Installed into the runtime image; NOT installed by the CI test job, and the
+# app only imports these when OTEL_ENABLED=true (see app/observability.py).
+opentelemetry-sdk==1.29.0
+opentelemetry-exporter-otlp-proto-grpc==1.29.0
+opentelemetry-instrumentation-fastapi==0.50b0
+opentelemetry-instrumentation-sqlalchemy==0.50b0
+opentelemetry-instrumentation-botocore==0.50b0
+opentelemetry-instrumentation-httpx==0.50b0
+opentelemetry-instrumentation-logging==0.50b0
+prometheus-fastapi-instrumentator==7.0.0
+python-json-logger==2.0.7

@@ -15,9 +15,36 @@ class Settings(BaseSettings):
     # Core
     secret_key: str = "dev-super-secret-change-me"
     environment: str = "development"
-    access_token_expire_minutes: int = 720
+    access_token_expire_minutes: int = 30            # short-lived; refresh renews it
+    refresh_token_expire_minutes: int = 60 * 24 * 14  # 14 days
     jwt_algorithm: str = "HS256"
     default_currency: str = "SAR"
+
+    # Auth cookies — the JWT is delivered as an httpOnly cookie so browser JS
+    # (and therefore XSS) cannot read it. A Bearer Authorization header still
+    # works for API clients and takes precedence when both are present.
+    cookie_secure: bool = False        # set True in production (HTTPS only)
+    cookie_samesite: str = "lax"       # "strict" | "lax" | "none"
+    cookie_domain: str = ""            # blank -> host-only cookie
+    access_cookie_name: str = "ath_access"
+    refresh_cookie_name: str = "ath_refresh"
+    csrf_cookie_name: str = "ath_csrf"
+
+    # Redis — token denylist (revocation) + caching. Blank disables (no-op).
+    redis_url: str = ""                # e.g. redis://redis:6379/0
+
+    # Async broker — when set, AI analysis is enqueued to RabbitMQ and executed
+    # by a dramatiq worker (out of the web process). Blank -> the API runs it
+    # in-process via FastAPI BackgroundTasks (dev/test fallback).
+    rabbitmq_url: str = ""             # e.g. amqp://guest:guest@rabbitmq:5672/
+
+    # Observability (OpenTelemetry). Off by default so dev/tests need no stack;
+    # enabled in the observability compose profile. When on, the app emits
+    # traces (OTLP -> collector -> Jaeger), a Prometheus /metrics endpoint, and
+    # structured JSON logs with trace correlation.
+    otel_enabled: bool = False
+    otel_exporter_otlp_endpoint: str = ""   # e.g. http://otel-collector:4317
+    otel_service_name: str = "athar-backend"
 
     # Database
     database_url: str = "postgresql+psycopg://nppm:nppm@localhost:5432/nppm"
@@ -50,12 +77,18 @@ class Settings(BaseSettings):
     ai_chat_model: str = "gpt-4o-mini"
 
     # Embeddings are pluggable and independent of the chat provider.
-    #   "local"  -> deterministic hashing embedding, works offline with only a
-    #               Claude key (Anthropic has no embeddings endpoint).
-    #   "openai" -> OpenAI embeddings API (requires openai_api_key).
-    embedding_provider: str = "local"
+    #   "st"     -> local multilingual sentence-transformer (SEMANTIC, offline,
+    #               Arabic-capable). Default: real semantic retrieval, no external
+    #               key. Downloads the model on first use.
+    #   "local"  -> deterministic hashing embedding (lexical, zero-dependency
+    #               fallback; works with no ML libs installed).
+    #   "openai" -> hosted OpenAI embeddings API (requires openai_api_key).
+    # NOTE: ai_embedding_dim MUST match the active provider's output dimension —
+    #   st (paraphrase-multilingual-MiniLM-L12-v2)=384, openai(3-small)=1536.
+    embedding_provider: str = "st"
+    ai_st_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     ai_embedding_model: str = "text-embedding-3-small"
-    ai_embedding_dim: int = 1536
+    ai_embedding_dim: int = 384
 
     # Seed
     seed_on_startup: bool = True

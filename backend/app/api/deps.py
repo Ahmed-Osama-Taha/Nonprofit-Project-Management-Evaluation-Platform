@@ -1,10 +1,12 @@
 from collections.abc import Callable
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.db import get_db
+from app.core.redis import is_revoked
 from app.core.security import decode_access_token
 from app.models import User, UserRole
 
@@ -12,6 +14,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token", auto_error=Fals
 
 
 def get_current_user(
+    request: Request,
     token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
@@ -20,11 +23,17 @@ def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if not token:
+
+    # A Bearer header (API clients) takes precedence; browsers send the token as
+    # an httpOnly cookie that JavaScript — and therefore XSS — cannot read.
+    raw = token or request.cookies.get(settings.access_cookie_name)
+    if not raw:
         raise credentials_error
 
-    payload = decode_access_token(token)
-    if not payload or "sub" not in payload:
+    payload = decode_access_token(raw)
+    if not payload or payload.get("type") != "access" or "sub" not in payload:
+        raise credentials_error
+    if is_revoked(payload.get("jti")):
         raise credentials_error
 
     user = db.get(User, payload["sub"])

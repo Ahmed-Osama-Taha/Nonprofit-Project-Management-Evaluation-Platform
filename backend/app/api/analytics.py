@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import require_roles
 from app.core.config import settings
 from app.core.db import get_db
+from app.core.redis import cache_get_json, cache_set_json
 from app.models import AIAnalysis, Project, ProjectStatus, User, UserRole
 from app.schemas import (
     CategoryStat,
@@ -37,10 +38,18 @@ def _high_risk_count(analysis: AIAnalysis | None) -> int:
     return sum(1 for r in analysis.risks if str(r.get("severity", "")).lower() == "high")
 
 
+_DASHBOARD_CACHE_KEY = "cache:reviewer_dashboard"
+_DASHBOARD_CACHE_TTL = 30  # seconds — a dashboard tolerates slight staleness
+
+
 @router.get("/reviewer", response_model=ReviewerDashboard)
 def reviewer_dashboard(
     db: Session = Depends(get_db), _: User = ReviewerOrAdmin
 ) -> ReviewerDashboard:
+    cached = cache_get_json(_DASHBOARD_CACHE_KEY)
+    if cached is not None:
+        return ReviewerDashboard.model_validate(cached)
+
     projects = list(
         db.scalars(
             select(Project).options(
@@ -136,7 +145,7 @@ def reviewer_dashboard(
         ProjectStatus.under_review.value, 0
     )
 
-    return ReviewerDashboard(
+    dashboard = ReviewerDashboard(
         total_projects=len(projects),
         pending_review=pending,
         decided=decided,
@@ -151,3 +160,7 @@ def reviewer_dashboard(
         ai_score_buckets=[LabelValue(label=k, value=v) for k, v in buckets.items()],
         queue=queue,
     )
+    cache_set_json(
+        _DASHBOARD_CACHE_KEY, dashboard.model_dump(mode="json"), _DASHBOARD_CACHE_TTL
+    )
+    return dashboard
