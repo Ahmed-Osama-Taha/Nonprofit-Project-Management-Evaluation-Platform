@@ -17,19 +17,14 @@ import type {
 // is what makes ngrok/reverse-proxy setups work. `??` (not `||`) so "" is kept.
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-const TOKEN_KEY = "nppm_token";
+const CSRF_COOKIE = "ath_csrf";
+const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string) {
-  window.localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken() {
-  window.localStorage.removeItem(TOKEN_KEY);
+/** Read a non-httpOnly cookie (used for the CSRF double-submit token). */
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : null;
 }
 
 interface RequestOptions {
@@ -43,8 +38,14 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     // Skip ngrok's free-tier browser interstitial for XHR/fetch requests.
     "ngrok-skip-browser-warning": "true",
   };
-  const token = getToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const method = opts.method || (opts.body || opts.formData ? "POST" : "GET");
+
+  // CSRF double-submit: echo the readable CSRF cookie in a header on mutations.
+  if (MUTATING.has(method)) {
+    const csrf = readCookie(CSRF_COOKIE);
+    if (csrf) headers["X-CSRF-Token"] = csrf;
+  }
 
   let body: BodyInit | undefined;
   if (opts.formData) {
@@ -55,10 +56,12 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   }
 
   const res = await fetch(`${API_URL}${path}`, {
-    method: opts.method || (body ? "POST" : "GET"),
+    method,
     headers,
     body,
     cache: "no-store",
+    // Send/receive the httpOnly auth cookies. The token is never in JS.
+    credentials: "include",
   });
 
   if (!res.ok) {
@@ -69,7 +72,6 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     } catch {
       /* ignore */
     }
-    if (res.status === 401) clearToken();
     throw new ApiError(detail, res.status);
   }
 
@@ -86,7 +88,8 @@ export class ApiError extends Error {
 }
 
 export const api = {
-  // Auth
+  // Auth — tokens live in httpOnly cookies set by the server; nothing is stored
+  // in JS-readable storage, so XSS cannot exfiltrate a session.
   login: (email: string, password: string) =>
     request<{ access_token: string; user: User }>("/api/auth/login", {
       body: { email, password },
@@ -102,6 +105,8 @@ export const api = {
     request<{ access_token: string; user: User }>("/api/auth/register", {
       body: payload,
     }),
+  refresh: () => request<{ user: User }>("/api/auth/refresh", { method: "POST" }),
+  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   me: () => request<User>("/api/auth/me"),
 
   // Projects

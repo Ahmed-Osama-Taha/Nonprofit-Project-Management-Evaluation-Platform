@@ -15,9 +15,23 @@ class Settings(BaseSettings):
     # Core
     secret_key: str = "dev-super-secret-change-me"
     environment: str = "development"
-    access_token_expire_minutes: int = 720
+    access_token_expire_minutes: int = 30            # short-lived; refresh renews it
+    refresh_token_expire_minutes: int = 60 * 24 * 14  # 14 days
     jwt_algorithm: str = "HS256"
     default_currency: str = "SAR"
+
+    # Auth cookies — the JWT is delivered as an httpOnly cookie so browser JS
+    # (and therefore XSS) cannot read it. A Bearer Authorization header still
+    # works for API clients and takes precedence when both are present.
+    cookie_secure: bool = False        # set True in production (HTTPS only)
+    cookie_samesite: str = "lax"       # "strict" | "lax" | "none"
+    cookie_domain: str = ""            # blank -> host-only cookie
+    access_cookie_name: str = "ath_access"
+    refresh_cookie_name: str = "ath_refresh"
+    csrf_cookie_name: str = "ath_csrf"
+
+    # Redis — token denylist (revocation) + caching. Blank disables (no-op).
+    redis_url: str = ""                # e.g. redis://redis:6379/0
 
     # Database
     database_url: str = "postgresql+psycopg://nppm:nppm@localhost:5432/nppm"

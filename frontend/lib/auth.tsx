@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { api, clearToken, getToken, setToken } from "./api";
+import { api } from "./api";
 import type { User } from "./types";
 
 interface AuthState {
@@ -17,7 +17,7 @@ interface AuthState {
     country?: string;
     website?: string;
   }) => Promise<User>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -28,33 +28,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!getToken()) {
-      setLoading(false);
-      return;
-    }
+    // The session lives in an httpOnly cookie the browser sends automatically —
+    // just ask the server who we are. A 401 simply means "not logged in".
     api
       .me()
       .then(setUser)
-      .catch(() => clearToken())
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
   async function login(email: string, password: string) {
     const res = await api.login(email, password);
-    setToken(res.access_token);
     setUser(res.user);
     return res.user;
   }
 
   async function register(payload: Parameters<AuthState["register"]>[0]) {
     const res = await api.register(payload);
-    setToken(res.access_token);
     setUser(res.user);
     return res.user;
   }
 
-  function logout() {
-    clearToken();
+  async function logout() {
+    try {
+      await api.logout();
+    } catch {
+      /* ignore — clear locally regardless */
+    }
     setUser(null);
     router.push("/login");
   }

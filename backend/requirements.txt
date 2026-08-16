@@ -15,6 +15,8 @@ anthropic==0.69.0
 openai==1.59.6
 # Local multilingual SEMANTIC embeddings for RAG (default provider = "st").
 sentence-transformers==3.3.1
+# Redis — JWT denylist (token revocation) + caching.
+redis==5.2.1
 pypdf==5.1.0
 python-docx==1.1.2
 httpx==0.28.1

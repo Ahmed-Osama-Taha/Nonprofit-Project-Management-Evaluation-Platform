@@ -112,6 +112,48 @@ async def audit_middleware(request: Request, call_next):
     return response
 
 
+_CSRF_EXEMPT = (
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/token",
+    "/api/auth/refresh",
+    "/api/auth/logout",
+)
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    """CSRF (double-submit) for cookie-auth mutations + baseline security headers.
+
+    CSRF is enforced only when the request is authenticated by the httpOnly
+    cookie AND carries no Bearer header — Bearer (API) clients are not CSRF-able
+    because a browser never attaches that header automatically. The strict CSP
+    is set by the Next.js frontend, which serves the HTML/JS."""
+    method = request.method
+    path = request.url.path
+    if (
+        method in ("POST", "PUT", "PATCH", "DELETE")
+        and path.startswith("/api/")
+        and not any(path.startswith(p) for p in _CSRF_EXEMPT)
+    ):
+        has_bearer = request.headers.get("authorization", "").lower().startswith("bearer ")
+        has_cookie = settings.access_cookie_name in request.cookies
+        if has_cookie and not has_bearer:
+            header_csrf = request.headers.get("x-csrf-token")
+            cookie_csrf = request.cookies.get(settings.csrf_cookie_name)
+            if not header_csrf or not cookie_csrf or header_csrf != cookie_csrf:
+                return JSONResponse(
+                    status_code=403, content={"detail": "CSRF token missing or invalid"}
+                )
+
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    return response
+
+
 def _resolve_actor(request: Request) -> User | None:
     auth_header = request.headers.get("authorization", "")
     if not auth_header.lower().startswith("bearer "):
