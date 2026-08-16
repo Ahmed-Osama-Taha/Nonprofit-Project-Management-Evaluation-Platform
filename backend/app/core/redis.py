@@ -8,6 +8,8 @@ caching and rate-limit counters.
 
 from __future__ import annotations
 
+import json
+
 from app.core.config import settings
 
 _client = None
@@ -53,3 +55,37 @@ def is_revoked(jti: str | None) -> bool:
         return r.exists(f"revoked:{jti}") == 1
     except Exception:  # noqa: BLE001
         return False
+
+
+# --------------------------------------------------------------------------- #
+# Caching (best-effort; no-op without Redis)
+# --------------------------------------------------------------------------- #
+def cache_get_json(key: str):
+    r = get_redis()
+    if not r:
+        return None
+    try:
+        raw = r.get(key)
+        return json.loads(raw) if raw else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def cache_set_json(key: str, value, ttl_seconds: int) -> None:
+    r = get_redis()
+    if not r:
+        return
+    try:
+        r.setex(key, max(1, ttl_seconds), json.dumps(value, default=str))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def cache_delete(*keys: str) -> None:
+    r = get_redis()
+    if not r or not keys:
+        return
+    try:
+        r.delete(*keys)
+    except Exception:  # noqa: BLE001
+        pass
