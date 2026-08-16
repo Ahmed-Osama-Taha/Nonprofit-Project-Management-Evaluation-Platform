@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # Redis — token denylist (revocation) + caching. Blank disables (no-op).
     redis_url: str = ""                # e.g. redis://redis:6379/0
 
+    # Async broker — when set, AI analysis is enqueued to RabbitMQ and executed
+    # by a dramatiq worker (out of the web process). Blank -> the API runs it
+    # in-process via FastAPI BackgroundTasks (dev/test fallback).
+    rabbitmq_url: str = ""             # e.g. amqp://guest:guest@rabbitmq:5672/
+
     # Database
     database_url: str = "postgresql+psycopg://nppm:nppm@localhost:5432/nppm"
 

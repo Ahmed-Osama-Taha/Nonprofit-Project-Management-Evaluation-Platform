@@ -17,6 +17,8 @@ openai==1.59.6
 sentence-transformers==3.3.1
 # Redis — JWT denylist (token revocation) + caching.
 redis==5.2.1
+# Async task queue — AI analysis runs in a dramatiq worker off the request path.
+dramatiq[rabbitmq]==1.17.1
 pypdf==5.1.0
 python-docx==1.1.2
 httpx==0.28.1

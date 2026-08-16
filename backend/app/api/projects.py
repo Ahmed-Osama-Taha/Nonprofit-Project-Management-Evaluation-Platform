@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user, require_roles
+from app.core.config import settings
 from app.core.db import SessionLocal, get_db
 from app.models import (
     Document,
@@ -81,7 +82,7 @@ def _authorize_edit(project: Project, user: User) -> None:
 
 
 def _run_analysis_background(project_id: str) -> None:
-    """Runs the AI pipeline in a fresh DB session (background task)."""
+    """Runs the AI pipeline in a fresh DB session (in-process fallback task)."""
     db = SessionLocal()
     try:
         project = db.get(Project, project_id)
@@ -91,6 +92,19 @@ def _run_analysis_background(project_id: str) -> None:
         pass
     finally:
         db.close()
+
+
+def _enqueue_analysis(
+    project_id: str, background: BackgroundTasks, language: str = "ar"
+) -> None:
+    """Enqueue analysis to the dramatiq worker when a broker is configured;
+    otherwise run it in-process via BackgroundTasks (dev/test)."""
+    if settings.rabbitmq_url:
+        from app.tasks import run_analysis_task
+
+        run_analysis_task.send(project_id, language)
+    else:
+        background.add_task(_run_analysis_background, project_id)
 
 
 # ── List / create ────────────────────────────────────────────
@@ -274,7 +288,7 @@ def submit_project(
     db.commit()
 
     # Kick off AI analysis asynchronously so submission stays fast.
-    background.add_task(_run_analysis_background, project.id)
+    _enqueue_analysis(project.id, background)
     return _load_project(db, project.id)
 
 
