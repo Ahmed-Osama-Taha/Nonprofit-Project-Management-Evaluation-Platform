@@ -1,0 +1,38 @@
+{
+  "title": "Athar — Logs & Traces",
+  "uid": "athar-logs-traces",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1, "title": "Error log rate (backend + worker)", "type": "timeseries",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate({container=~\".+(backend|worker).+\"} |~ `(?i)error|exception|traceback`[5m]))", "legendFormat": "errors/s" }
+      ]
+    },
+    {
+      "id": 2, "title": "Application logs (backend + worker)", "type": "logs",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 7 },
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending", "enableLogDetails": true },
+      "targets": [
+        { "refId": "A", "expr": "{container=~\".+(backend|worker).+\"}" }
+      ]
+    },
+    {
+      "id": 3, "title": "Recent traces (backend)", "type": "traces",
+      "datasource": { "type": "jaeger", "uid": "jaeger" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 19 },
+      "targets": [
+        { "refId": "A", "queryType": "search", "service": "athar-backend", "limit": 20 }
+      ]
+    }
+  ]
+}
