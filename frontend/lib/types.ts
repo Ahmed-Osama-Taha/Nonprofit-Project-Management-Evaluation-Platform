@@ -53,6 +53,12 @@ export interface Payment {
   paid_at?: string | null;
 }
 
+export interface SubscriptionInfo {
+  active: boolean;
+  status?: string | null;
+  current_period_end?: string | null;
+}
+
 export interface Pricing {
   currency: string;
   vat_rate: number;

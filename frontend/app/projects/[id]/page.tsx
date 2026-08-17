@@ -1,13 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { Project } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { useI18n, fmtMoney } from "@/lib/i18n";
-import { RequireAuth, StatusBadge, num, dateStr } from "@/components/ui";
+import {
+  RequireAuth,
+  StatusBadge,
+  PageHead,
+  ProjectFlow,
+  num,
+  dateStr,
+} from "@/components/ui";
 import { AIPanel } from "@/components/AIPanel";
+import { Reviews, ReviewActions } from "@/components/project/ReviewPanel";
+import { ChatBox } from "@/components/project/ChatBox";
+import Link from "next/link";
 
 const EDITABLE = ["draft", "changes_requested"];
 
@@ -58,55 +68,35 @@ function Detail() {
 
   return (
     <>
-      <div className="flex-between" style={{ marginBottom: 14 }}>
-        <div>
-          <h1 style={{ margin: 0 }}>{p.title}</h1>
-          <div className="small muted">
-            {p.organization.name} · {dateStr(p.submitted_at)}
-          </div>
-        </div>
-        <StatusBadge status={p.status} />
-      </div>
+      {isReviewer && (
+        <Link href="/reviewer" className="nav-link" style={{ display: "inline-block", marginBottom: 10 }}>
+          {t("flow.backToQueue")}
+        </Link>
+      )}
+
+      <PageHead
+        title={p.title}
+        sub={`${p.organization.name}${p.submitted_at ? " · " + dateStr(p.submitted_at) : ""}`}
+        action={<StatusBadge status={p.status} />}
+      />
+
+      <ProjectFlow status={p.status} />
 
       {msg && <div className="success-box">{msg}</div>}
+
+      {isOwner && <OwnerStatusBanner status={p.status} />}
 
       {isReviewer && (
         <AIPanel projectId={p.id} analysis={p.ai_analysis} canRerun onRerun={load} />
       )}
 
-      <div className="card">
-        <div className="card-title">
-          <h3 style={{ margin: 0 }}>{t("common.viewDetails")}</h3>
-        </div>
-        <dl className="kv">
-          <dt>{t("proj.category")}</dt>
-          <dd>{p.category || t("common.none")}</dd>
-          <dt>{t("proj.location")}</dt>
-          <dd>{p.location || t("common.none")}</dd>
-          <dt>{t("proj.budget")}</dt>
-          <dd>{fmtMoney(t, p.requested_budget)}</dd>
-          <dt>{t("proj.targetBeneficiaries")}</dt>
-          <dd>{num(p.target_beneficiaries)}</dd>
-          <dt>{t("proj.duration")}</dt>
-          <dd>
-            {p.duration_months
-              ? `${p.duration_months} ${t("common.months")}`
-              : t("common.none")}
-          </dd>
-        </dl>
-        <Section title={t("proj.summary")} body={p.summary} />
-        <Section title={t("proj.problem")} body={p.problem_statement} />
-        <Section title={t("proj.goals")} body={p.goals} />
-        <Section title={t("proj.kpis")} body={p.kpis} />
-        <Section title={t("proj.beneficiaryDesc")} body={p.beneficiary_description} />
-      </div>
+      <DetailsCard project={p} canEdit={!!canEdit} onSaved={load} />
 
       <Documents project={p} canEdit={!!canEdit} onChange={load} />
 
       {isOwner && (
         <OwnerActions project={p} onChange={load} setMsg={setMsg} setErr={setErr} />
       )}
-      {canEdit && <EditForm project={p} onSaved={load} />}
 
       <Reviews project={p} />
 
@@ -124,6 +114,21 @@ function Section({ title, body }: { title: string; body?: string | null }) {
       <p style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{body}</p>
     </div>
   );
+}
+
+/** Contextual status message for the owner on non-editable states. */
+function OwnerStatusBanner({ status }: { status: string }) {
+  const { t } = useI18n();
+  const map: Record<string, { cls: string; key: string }> = {
+    submitted: { cls: "info-box", key: "flow.awaiting" },
+    under_review: { cls: "info-box", key: "flow.inReview" },
+    changes_requested: { cls: "warn-box", key: "flow.changes" },
+    approved: { cls: "success-box", key: "flow.approved" },
+    rejected: { cls: "error", key: "flow.rejected" },
+  };
+  const m = map[status];
+  if (!m) return null;
+  return <div className={m.cls} style={{ marginBottom: 14 }}>{t(m.key)}</div>;
 }
 
 function Documents({
@@ -247,6 +252,7 @@ function OwnerActions({
   setErr: (s: string) => void;
 }) {
   const { t } = useI18n();
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const canSubmit = ["draft", "changes_requested"].includes(project.status);
   if (!canSubmit) return null;
@@ -260,45 +266,127 @@ function OwnerActions({
       setMsg("✓");
       onChange();
     } catch (e) {
-      // 402 = payment required (Model A). Start checkout and send the user to
-      // the gateway; they return to /payments/return which submits on success.
+      // 402 = payment required (Model A). Send the user to the checkout screen
+      // where they see the price + VAT and choose how to pay — never redirect
+      // straight to a gateway without showing the amount.
       if (e instanceof ApiError && e.status === 402) {
-        try {
-          const co = await api.checkout("per_review", project.id);
-          if (co.redirect_url) {
-            window.location.href = co.redirect_url;
-            return;
-          }
-          setErr("Could not start payment.");
-        } catch (err) {
-          setErr(err instanceof Error ? err.message : "Could not start payment.");
-        }
-      } else {
-        setErr(e instanceof Error ? e.message : "Submission failed");
+        router.push(`/projects/${project.id}/checkout`);
+        return;
       }
+      setErr(e instanceof Error ? e.message : "Submission failed");
     } finally {
       setBusy(false);
     }
   }
 
+  const detailsDone = !!(project.problem_statement && project.goals);
+  const docsDone = (project.documents?.length ?? 0) > 0;
+
+  const Item = ({ done, title, hint }: { done: boolean; title: string; hint: string }) => (
+    <div className={`next-item${done ? " done" : ""}`}>
+      <span className="tick">{done ? "✓" : ""}</span>
+      <span>
+        <span className="ni-title">{title}</span>
+        <div className="ni-hint">{hint}</div>
+      </span>
+    </div>
+  );
+
   return (
     <div className="card">
-      <div className="flex-between">
-        <div>
-          <strong>{t("proj.submitConfirm")}</strong>
-          <div className="small muted">{t("pay.submitHint")}</div>
-        </div>
-        <button className="btn btn-success" onClick={submit} disabled={busy}>
-          {busy ? t("common.loading") : t("proj.submitConfirm")}
-        </button>
+      <div className="card-title">
+        <h3 style={{ margin: 0 }}>{t("flow.next")}</h3>
       </div>
+      <div className="next-step" style={{ marginBottom: 16 }}>
+        <Item done={detailsDone} title={t("flow.stepDetails")} hint={t("flow.detailsHint")} />
+        <Item done={docsDone} title={t("flow.stepDocs")} hint={t("flow.docsHint")} />
+        <Item done={false} title={t("flow.stepSubmit")} hint={t("flow.submitHint")} />
+      </div>
+      <button
+        className="btn btn-success"
+        onClick={submit}
+        disabled={busy || !detailsDone}
+        title={!detailsDone ? t("flow.detailsHint") : undefined}
+      >
+        {busy ? t("common.loading") : t("proj.submitConfirm")}
+      </button>
     </div>
   );
 }
 
-function EditForm({ project, onSaved }: { project: Project; onSaved: () => void }) {
+/** Single source of truth for the project's details: read-only view with an
+ *  inline "Edit details" toggle (owners, while editable). No more duplicate
+ *  read-only + separate edit-form cards. */
+function DetailsCard({
+  project,
+  canEdit,
+  onSaved,
+}: {
+  project: Project;
+  canEdit: boolean;
+  onSaved: () => void;
+}) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <EditForm
+        project={project}
+        onSaved={() => {
+          setEditing(false);
+          onSaved();
+        }}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
+
+  return (
+    <div className="card">
+      <div className="card-title flex-between">
+        <h3 style={{ margin: 0 }}>{t("common.viewDetails")}</h3>
+        {canEdit && (
+          <button className="btn btn-secondary btn-sm" onClick={() => setEditing(true)}>
+            ✎ {t("flow.edit")}
+          </button>
+        )}
+      </div>
+      <dl className="kv">
+        <dt>{t("proj.category")}</dt>
+        <dd>{project.category || t("common.none")}</dd>
+        <dt>{t("proj.location")}</dt>
+        <dd>{project.location || t("common.none")}</dd>
+        <dt>{t("proj.budget")}</dt>
+        <dd>{fmtMoney(t, project.requested_budget)}</dd>
+        <dt>{t("proj.targetBeneficiaries")}</dt>
+        <dd>{num(project.target_beneficiaries)}</dd>
+        <dt>{t("proj.duration")}</dt>
+        <dd>
+          {project.duration_months
+            ? `${project.duration_months} ${t("common.months")}`
+            : t("common.none")}
+        </dd>
+      </dl>
+      <Section title={t("proj.summary")} body={project.summary} />
+      <Section title={t("proj.problem")} body={project.problem_statement} />
+      <Section title={t("proj.goals")} body={project.goals} />
+      <Section title={t("proj.kpis")} body={project.kpis} />
+      <Section title={t("proj.beneficiaryDesc")} body={project.beneficiary_description} />
+    </div>
+  );
+}
+
+function EditForm({
+  project,
+  onSaved,
+  onCancel,
+}: {
+  project: Project;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     title: project.title,
     summary: project.summary || "",
@@ -340,7 +428,6 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
           ? Number(form.target_beneficiaries)
           : null,
       });
-      setOpen(false);
       onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
@@ -353,19 +440,10 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  if (!open)
-    return (
-      <div className="card">
-        <button className="btn btn-secondary" onClick={() => setOpen(true)}>
-          ✎ {t("common.viewDetails")}
-        </button>
-      </div>
-    );
-
   return (
     <div className="card">
       <div className="card-title">
-        <h3 style={{ margin: 0 }}>✎ {t("common.viewDetails")}</h3>
+        <h3 style={{ margin: 0 }}>✎ {t("flow.edit")}</h3>
       </div>
       {err && <div className="error">{err}</div>}
       <div className="field">
@@ -456,201 +534,10 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
         <button className="btn" onClick={save} disabled={busy}>
           {busy ? t("common.loading") : t("common.save")}
         </button>
-        <button className="btn btn-secondary" onClick={() => setOpen(false)}>
+        <button className="btn btn-secondary" onClick={onCancel}>
           {t("common.cancel")}
         </button>
       </div>
-    </div>
-  );
-}
-
-function Reviews({ project }: { project: Project }) {
-  const { t } = useI18n();
-  if (!project.reviews || project.reviews.length === 0) return null;
-  return (
-    <div className="card">
-      <div className="card-title">
-        <h3 style={{ margin: 0 }}>{t("proj.reviews")}</h3>
-      </div>
-      {project.reviews.map((r) => (
-        <div key={r.id} className="list-item">
-          <div className="flex-between">
-            <strong>{r.reviewer.full_name}</strong>
-            <span className={`badge badge-${decisionBadge(r.decision)}`}>
-              {t(`status.${decisionBadge(r.decision)}`)}
-            </span>
-          </div>
-          {r.comment && <p style={{ margin: "6px 0 0" }}>{r.comment}</p>}
-          <div className="small muted">{dateStr(r.created_at)}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function decisionBadge(d: string) {
-  if (d === "approve") return "approved";
-  if (d === "reject") return "rejected";
-  if (d === "request_changes") return "changes_requested";
-  return "submitted";
-}
-
-function ReviewActions({
-  project,
-  onChange,
-}: {
-  project: Project;
-  onChange: () => void;
-}) {
-  const { t } = useI18n();
-  const [comment, setComment] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  const decided = ["approved", "rejected"].includes(project.status);
-  const notSubmitted = project.status === "draft";
-
-  async function act(
-    decision: "comment" | "request_changes" | "approve" | "reject",
-  ) {
-    setBusy(true);
-    setErr("");
-    try {
-      await api.createReview(project.id, decision, comment || undefined);
-      setComment("");
-      onChange();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Action failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (notSubmitted) return null;
-
-  if (decided)
-    return (
-      <div className="card">
-        <p className="muted flex">
-          {t("review.decision")}: <StatusBadge status={project.status} />
-        </p>
-      </div>
-    );
-
-  return (
-    <div className="card">
-      <div className="card-title">
-        <div>
-          <h3 style={{ margin: 0 }}>{t("review.decision")}</h3>
-          <span className="section-hint">{t("ai.subtitle")}</span>
-        </div>
-      </div>
-      {err && <div className="error">{err}</div>}
-      <div className="field">
-        <label>{t("review.comment")}</label>
-        <textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder={t("review.addComment")}
-        />
-      </div>
-      <div className="chip-row">
-        <button
-          className="btn btn-secondary"
-          onClick={() => act("comment")}
-          disabled={busy}
-        >
-          {t("review.comment")}
-        </button>
-        <button
-          className="btn btn-warning"
-          onClick={() => act("request_changes")}
-          disabled={busy}
-        >
-          {t("review.requestChanges")}
-        </button>
-        <button
-          className="btn btn-success"
-          onClick={() => act("approve")}
-          disabled={busy}
-        >
-          {t("review.approve")}
-        </button>
-        <button
-          className="btn btn-danger"
-          onClick={() => act("reject")}
-          disabled={busy}
-        >
-          {t("review.reject")}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ChatBox({ projectId }: { projectId: string }) {
-  const { t, lang } = useI18n();
-  const [q, setQ] = useState("");
-  const [answer, setAnswer] = useState("");
-  const [sources, setSources] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function ask() {
-    if (!q.trim()) return;
-    setBusy(true);
-    setErr("");
-    setAnswer("");
-    try {
-      const res = await api.chat(projectId, q, lang);
-      setAnswer(res.answer);
-      setSources(res.sources);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="card">
-      <div className="card-title">
-        <h3 style={{ margin: 0 }}>{t("ai.ask")}</h3>
-      </div>
-      {err && <div className="error">{err}</div>}
-      <div className="flex">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={t("ai.askPlaceholder")}
-          onKeyDown={(e) => e.key === "Enter" && ask()}
-        />
-        <button className="btn" onClick={ask} disabled={busy}>
-          {busy ? "…" : t("ai.ask")}
-        </button>
-      </div>
-      {answer && (
-        <div style={{ marginTop: 12 }}>
-          <p style={{ whiteSpace: "pre-wrap" }}>{answer}</p>
-          {sources.length > 0 && (
-            <details>
-              <summary className="small muted">{sources.length}</summary>
-              {sources.map((s, i) => (
-                <p
-                  key={i}
-                  className="small muted"
-                  style={{
-                    borderInlineStart: "3px solid var(--border)",
-                    paddingInlineStart: 8,
-                  }}
-                >
-                  {s.slice(0, 300)}…
-                </p>
-              ))}
-            </details>
-          )}
-        </div>
-      )}
     </div>
   );
 }

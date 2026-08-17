@@ -50,6 +50,7 @@ export function NavBar() {
                 {link("/reviewer", t("nav.reviewer"))}
               </>
             )}
+            {link("/account", t("nav.account"))}
           </div>
         )}
 

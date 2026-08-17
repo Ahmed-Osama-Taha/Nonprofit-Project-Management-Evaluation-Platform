@@ -8,6 +8,7 @@ import type { ReviewerDashboard } from "@/lib/types";
 import {
   RequireAuth,
   StatusBadge,
+  PageHead,
   BarList,
   Donut,
   money,
@@ -53,10 +54,7 @@ function Dashboard() {
 
   return (
     <>
-      <div className="hero">
-        <h1>{t("rev.title")}</h1>
-        <p>{t("rev.subtitle")}</p>
-      </div>
+      <PageHead title={t("rev.title")} sub={t("rev.subtitle")} />
 
       {/* KPI tiles */}
       <div className="grid-stats" style={{ marginBottom: 18 }}>

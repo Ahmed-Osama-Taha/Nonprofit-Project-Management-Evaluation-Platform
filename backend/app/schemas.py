@@ -87,6 +87,12 @@ class CheckoutResponse(BaseModel):
     redirect_url: str | None = None
 
 
+class SubscriptionOut(BaseModel):
+    active: bool
+    status: str | None = None
+    current_period_end: datetime | None = None
+
+
 class PricingOut(BaseModel):
     currency: str
     vat_rate: float
