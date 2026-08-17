@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useI18n, statusLabel } from "@/lib/i18n";
 import type { AuditEntry, DashboardStats, User } from "@/lib/types";
-import { RequireAuth, dateStr } from "@/components/ui";
+import { RequireAuth, PageHead, dateStr } from "@/components/ui";
 
 function AdminInner() {
   const { t } = useI18n();
@@ -46,10 +46,7 @@ function AdminInner() {
 
   return (
     <>
-      <div className="hero">
-        <h1>{t("admin.title")}</h1>
-        <p>{t("app.tagline")}</p>
-      </div>
+      <PageHead title={t("admin.title")} sub={t("app.tagline")} />
 
       <div className="chip-row" style={{ marginBottom: 16 }}>
         {tabs.map((tb) => (
