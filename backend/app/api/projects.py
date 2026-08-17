@@ -41,6 +41,7 @@ from app.services import storage
 from app.services.ai import AINotConfigured
 from app.services.audit import notify, record_audit
 from app.services.extraction import extract_text
+from app.services.upload_security import validate_upload
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -220,24 +221,26 @@ async def upload_document(
     _authorize_edit(project, user)
 
     data = await file.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File exceeds 20 MB limit")
+    # Validate BEFORE touching storage: extension allowlist + magic-byte sniff +
+    # executable rejection + text safety. The client Content-Type is ignored.
+    safe_name, content_type, ext = validate_upload(file.filename or "", data)
 
     storage.ensure_bucket()
-    key = f"projects/{project_id}/{uuid.uuid4()}-{file.filename}"
-    storage.upload_bytes(key, data, file.content_type)
+    # The object key never contains user-controlled text (uuid + validated ext).
+    key = f"projects/{project_id}/{uuid.uuid4()}{ext}"
+    storage.upload_bytes(key, data, content_type)
 
     text = ""
     extraction_status = "done"
     try:
-        text = extract_text(file.filename or "", file.content_type, data)
+        text = extract_text(safe_name, content_type, data)
     except Exception:  # noqa: BLE001 — file stored even if extraction fails
         extraction_status = "failed"
 
     doc = Document(
         project_id=project_id,
-        filename=file.filename or "upload",
-        content_type=file.content_type,
+        filename=safe_name,
+        content_type=content_type,
         size_bytes=len(data),
         storage_key=key,
         extracted_text=text or None,
@@ -265,7 +268,13 @@ def download_document(
     doc = db.get(Document, document_id)
     if not doc or doc.project_id != project_id:
         raise HTTPException(status_code=404, detail="Document not found")
-    return {"url": storage.presigned_url(doc.storage_key)}
+    # Force download-as-attachment with a safe content type so the browser never
+    # renders/executes the file inline.
+    return {
+        "url": storage.presigned_url(
+            doc.storage_key, filename=doc.filename, content_type=doc.content_type
+        )
+    }
 
 
 # ── Workflow: submit ─────────────────────────────────────────

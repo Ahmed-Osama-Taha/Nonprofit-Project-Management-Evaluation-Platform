@@ -52,8 +52,17 @@ def download_bytes(key: str) -> bytes:
     return buf.getvalue()
 
 
-def presigned_url(key: str, expires: int = 3600) -> str:
-    """Generate a browser-facing download URL using the public endpoint."""
+def presigned_url(
+    key: str,
+    filename: str | None = None,
+    content_type: str | None = None,
+    expires: int = 3600,
+) -> str:
+    """Generate a browser-facing download URL using the public endpoint.
+
+    Forces the response to be served as a safe *attachment* (never rendered
+    inline) with a controlled content type, so an uploaded file can't execute
+    or render in the viewer's browser."""
     s3 = boto3.client(
         "s3",
         endpoint_url=settings.s3_public_endpoint_url,
@@ -62,8 +71,14 @@ def presigned_url(key: str, expires: int = 3600) -> str:
         region_name=settings.s3_region,
         config=Config(signature_version="s3v4"),
     )
+    params = {"Bucket": settings.s3_bucket, "Key": key}
+    if content_type:
+        params["ResponseContentType"] = content_type
+    disposition = "attachment"
+    if filename:
+        safe = filename.replace('"', "").replace("\\", "")
+        disposition = f'attachment; filename="{safe}"'
+    params["ResponseContentDisposition"] = disposition
     return s3.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": settings.s3_bucket, "Key": key},
-        ExpiresIn=expires,
+        "get_object", Params=params, ExpiresIn=expires
     )
