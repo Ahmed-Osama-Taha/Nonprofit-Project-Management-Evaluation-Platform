@@ -60,6 +60,16 @@ class UserOut(ORMModel):
     created_at: datetime
 
 
+class SessionOut(ORMModel):
+    id: str
+    device: str | None = None
+    ip: str | None = None
+    location: str | None = None
+    created_at: datetime
+    last_seen_at: datetime
+    current: bool = False
+
+
 # ── Projects ─────────────────────────────────────────────────
 class ProjectBase(BaseModel):
     title: str

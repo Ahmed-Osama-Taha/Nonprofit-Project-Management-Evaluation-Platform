@@ -79,6 +79,128 @@ export function ProjectRow({ p, href }: { p: Project; href: string }) {
   );
 }
 
+/** Page title + optional subtitle and right-aligned action slot. */
+export function PageHead({
+  title,
+  sub,
+  action,
+}: {
+  title: string;
+  sub?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="page-head flex-between">
+      <div>
+        <h1>{title}</h1>
+        {sub && <div className="sub">{sub}</div>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+/** Numbered progress stepper for multi-step flows. */
+export function Stepper({ steps, current }: { steps: string[]; current: number }) {
+  return (
+    <div className="stepper">
+      {steps.map((label, i) => {
+        const state = i === current ? "active" : i < current ? "done" : "";
+        return (
+          <div key={label} className={`step ${state}`}>
+            <span className="dot">{i < current ? "✓" : i + 1}</span>
+            <span className="cap">{label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Friendly empty state with icon, heading, body and optional action. */
+export function EmptyState({
+  icon = "📋",
+  title,
+  body,
+  action,
+}: {
+  icon?: string;
+  title: string;
+  body?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="empty">
+      <div className="ico">{icon}</div>
+      <h3>{title}</h3>
+      {body && <p>{body}</p>}
+      {action && <div style={{ marginTop: 8 }}>{action}</div>}
+    </div>
+  );
+}
+
+/** Shimmer placeholder. */
+export function Skeleton({
+  h = 14,
+  w = "100%",
+  style,
+}: {
+  h?: number | string;
+  w?: number | string;
+  style?: React.CSSProperties;
+}) {
+  return <div className="skel" style={{ height: h, width: w, ...style }} />;
+}
+
+/** A loading grid of skeleton project cards. */
+export function ProjectCardSkeleton() {
+  return (
+    <div className="proj-card">
+      <Skeleton h={18} w="70%" />
+      <Skeleton h={13} w="45%" />
+      <Skeleton h={13} w="60%" />
+      <div style={{ marginTop: "auto", paddingTop: 10 }}>
+        <Skeleton h={12} w="40%" />
+      </div>
+    </div>
+  );
+}
+
+/** Rich clickable project card for the dashboard grid. */
+export function ProjectCard({ p, href }: { p: Project; href: string }) {
+  const { t } = useI18n();
+  const docs = p.documents?.length ?? 0;
+  return (
+    <Link href={href} className="proj-card">
+      <div className="pc-head">
+        <div className="pc-title">{p.title}</div>
+        <StatusBadge status={p.status} />
+      </div>
+      <div className="pc-meta">
+        {p.category || t("common.none")} · {fmtMoney(t, p.requested_budget)}
+      </div>
+      <div className="pc-tags">
+        {p.location && <span className="pill">{p.location}</span>}
+        {p.duration_months ? (
+          <span className="pill">
+            {p.duration_months} {t("common.months")}
+          </span>
+        ) : null}
+      </div>
+      <div className="pc-foot">
+        <span>
+          {t("proj.updated")} {dateStr(p.updated_at)}
+        </span>
+        {docs > 0 && (
+          <span>
+            📎 {docs} {t("proj.docs")}
+          </span>
+        )}
+      </div>
+    </Link>
+  );
+}
+
 // ── Chart primitives (dependency-free, theme-aware) ───────────
 
 const CHART_COLORS = [

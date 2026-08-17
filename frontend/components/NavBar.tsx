@@ -72,10 +72,10 @@ export function NavBar() {
 
         {user ? (
           <div className="flex">
-            <span className="nav-user">
+            <Link href="/account" className="nav-user" title={t("acct.title")}>
               {user.full_name}{" "}
               <span className="pill">{t(`role.${user.role}`)}</span>
-            </span>
+            </Link>
             <button className="btn btn-secondary btn-sm" onClick={logout}>
               {t("nav.logout")}
             </button>

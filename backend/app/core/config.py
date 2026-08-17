@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     refresh_cookie_name: str = "ath_refresh"
     csrf_cookie_name: str = "ath_csrf"
 
+    # Session activity log — optional local MaxMind GeoLite2 City DB for coarse
+    # geolocation of login IPs. Blank -> IPs are stored but not geolocated (no
+    # external calls are ever made).
+    geoip_db_path: str = ""
+
     # Redis — token denylist (revocation) + caching. Blank disables (no-op).
     redis_url: str = ""                # e.g. redis://redis:6379/0
 

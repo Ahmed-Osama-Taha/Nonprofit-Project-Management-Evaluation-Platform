@@ -113,6 +113,37 @@ class User(Base, TimestampMixin):
     organization: Mapped[Organization | None] = relationship(back_populates="users")
 
 
+class UserSession(Base):
+    """A login session = one refresh-token family for one device/browser.
+
+    Created at login; the refresh jti rotates on every /refresh while the row's
+    id (the token `sid`) stays stable, so the user sees one continuous session
+    per device. Lets a user list active sessions and remotely sign one out.
+    """
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Current refresh-token jti for this session (rotates on refresh).
+    refresh_jti: Mapped[str | None] = mapped_column(String(64), index=True)
+    device: Mapped[str | None] = mapped_column(String(128))   # "Chrome (Windows)"
+    user_agent: Mapped[str | None] = mapped_column(String(512))
+    ip: Mapped[str | None] = mapped_column(String(64))
+    location: Mapped[str | None] = mapped_column(String(128))  # best-effort geo
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship()
+
+
 class Project(Base, TimestampMixin):
     __tablename__ = "projects"
 

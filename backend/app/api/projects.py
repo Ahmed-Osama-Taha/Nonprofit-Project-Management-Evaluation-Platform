@@ -10,7 +10,9 @@ from fastapi import (
     File,
     HTTPException,
     Query,
+    Response,
     UploadFile,
+    status,
 )
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -283,7 +285,7 @@ def delete_document(
     document_id: str,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> None:
+) -> Response:
     """Remove a document — only the owning org, and only while editable."""
     project = _load_project(db, project_id)
     _authorize_edit(project, user)
@@ -291,12 +293,14 @@ def delete_document(
     if not doc or doc.project_id != project_id:
         raise HTTPException(status_code=404, detail="Document not found")
     storage.delete_object(doc.storage_key)
+    filename = doc.filename
     db.delete(doc)
     record_audit(
         db, actor=user, action="document.delete", entity_type="document",
-        entity_id=document_id, detail={"project_id": project_id, "filename": doc.filename},
+        entity_id=document_id, detail={"project_id": project_id, "filename": filename},
     )
     db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ── Workflow: submit ─────────────────────────────────────────

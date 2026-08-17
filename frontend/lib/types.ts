@@ -28,6 +28,16 @@ export interface User {
   created_at: string;
 }
 
+export interface SessionInfo {
+  id: string;
+  device?: string | null;
+  ip?: string | null;
+  location?: string | null;
+  created_at: string;
+  last_seen_at: string;
+  current: boolean;
+}
+
 export interface DocumentFile {
   id: string;
   filename: string;

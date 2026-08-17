@@ -9,6 +9,7 @@ import type {
   Project,
   Review,
   ReviewerDashboard,
+  SessionInfo,
   User,
 } from "./types";
 
@@ -108,6 +109,13 @@ export const api = {
   refresh: () => request<{ user: User }>("/api/auth/refresh", { method: "POST" }),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   me: () => request<User>("/api/auth/me"),
+
+  // Active sessions (device activity log)
+  sessions: () => request<SessionInfo[]>("/api/auth/sessions"),
+  revokeSession: (id: string) =>
+    request<void>(`/api/auth/sessions/${id}`, { method: "DELETE" }),
+  revokeOtherSessions: () =>
+    request<void>("/api/auth/sessions/revoke-others", { method: "POST" }),
 
   // Projects
   listProjects: (params?: { status?: string; category?: string; q?: string }) => {

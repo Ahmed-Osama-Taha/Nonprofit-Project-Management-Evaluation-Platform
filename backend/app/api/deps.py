@@ -36,6 +36,17 @@ def get_current_user(
     if is_revoked(payload.get("jti")):
         raise credentials_error
 
+    # If the token belongs to a tracked login session, that session must still
+    # be active — this makes remote sign-out effective immediately, even without
+    # a Redis denylist. Legacy tokens (no sid) skip the check.
+    sid = payload.get("sid")
+    if sid is not None:
+        from app.models import UserSession
+
+        session = db.get(UserSession, sid)
+        if not session or session.revoked_at is not None:
+            raise credentials_error
+
     user = db.get(User, payload["sub"])
     if not user or not user.is_active:
         raise credentials_error
