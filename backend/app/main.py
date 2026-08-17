@@ -9,7 +9,15 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import admin, analytics, auth, notifications, projects, reviews
+from app.api import (
+    admin,
+    analytics,
+    auth,
+    notifications,
+    payments,
+    projects,
+    reviews,
+)
 from app.core.config import settings
 from app.core.db import SessionLocal, init_db
 from app.core.security import decode_access_token
@@ -241,6 +249,7 @@ app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(reviews.router)
 app.include_router(notifications.router)
+app.include_router(payments.router)
 app.include_router(admin.router)
 app.include_router(analytics.router)
 

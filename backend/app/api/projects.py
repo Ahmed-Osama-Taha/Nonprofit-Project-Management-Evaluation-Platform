@@ -352,6 +352,16 @@ def submit_project(
             detail="Problem statement and goals are required before submission",
         )
 
+    # Entitlement gate (Model A): a review must be paid for — via an active
+    # subscription or a per-review payment. No-op unless payments are enabled.
+    from app.services.payments import service as pay
+
+    if not pay.has_entitlement(db, project.organization_id, project):
+        raise HTTPException(
+            status_code=402,
+            detail="Payment required: purchase a review or subscribe to submit.",
+        )
+
     project.status = ProjectStatus.submitted
     project.submitted_at = datetime.now(timezone.utc)
     record_audit(db, actor=user, action="project.submit", entity_type="project", entity_id=project.id)

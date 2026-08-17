@@ -28,6 +28,41 @@ export interface User {
   created_at: string;
 }
 
+export type PaymentKind = "per_review" | "subscription";
+export type PaymentStatusT =
+  | "initiated"
+  | "pending"
+  | "paid"
+  | "failed"
+  | "expired"
+  | "refunded";
+
+export interface Payment {
+  id: string;
+  kind: PaymentKind;
+  status: PaymentStatusT;
+  project_id?: string | null;
+  amount_minor: number;
+  vat_minor: number;
+  total_minor: number;
+  currency: string;
+  provider: string;
+  redirect_url?: string | null;
+  failure_reason?: string | null;
+  created_at: string;
+  paid_at?: string | null;
+}
+
+export interface Pricing {
+  currency: string;
+  vat_rate: number;
+  per_review_minor: number;
+  per_review_total_minor: number;
+  subscription_minor: number;
+  subscription_total_minor: number;
+  subscription_period_days: number;
+}
+
 export interface SessionInfo {
   id: string;
   device?: string | null;

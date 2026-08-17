@@ -182,6 +182,21 @@ const EN: Dict = {
   "acct.noSessions": "No active sessions.",
   "acct.revokeConfirm": "Sign this device out?",
   "nav.account": "Account",
+  // Payments
+  "pay.submitHint": "Submitting a project for review requires payment.",
+  "pay.return.title": "Payment",
+  "pay.processing": "Confirming your payment…",
+  "pay.paid": "Payment confirmed",
+  "pay.paidBody": "Your project has been submitted for review.",
+  "pay.failed": "Payment not completed",
+  "pay.failedBody": "No charge was made. You can try again from your project.",
+  "pay.backToProject": "Back to project",
+  "pay.sandboxNote": "Sandbox mode — no real card is charged. Simulate the gateway result:",
+  "pay.simulatePay": "Simulate successful payment",
+  "pay.simulateFail": "Simulate failed payment",
+  "pay.amount": "Amount",
+  "pay.vat": "VAT",
+  "pay.total": "Total",
 };
 
 const AR: Dict = {
@@ -346,6 +361,21 @@ const AR: Dict = {
   "acct.noSessions": "لا توجد جلسات نشطة.",
   "acct.revokeConfirm": "تسجيل خروج هذا الجهاز؟",
   "nav.account": "الحساب",
+  // Payments
+  "pay.submitHint": "إرسال المشروع للمراجعة يتطلب الدفع.",
+  "pay.return.title": "الدفع",
+  "pay.processing": "جارٍ تأكيد عملية الدفع…",
+  "pay.paid": "تم تأكيد الدفع",
+  "pay.paidBody": "تم إرسال مشروعك للمراجعة.",
+  "pay.failed": "لم تكتمل عملية الدفع",
+  "pay.failedBody": "لم يتم أي خصم. يمكنك المحاولة مرة أخرى من مشروعك.",
+  "pay.backToProject": "العودة إلى المشروع",
+  "pay.sandboxNote": "الوضع التجريبي — لا يتم خصم أي بطاقة حقيقية. حاكِ نتيجة البوابة:",
+  "pay.simulatePay": "محاكاة دفع ناجح",
+  "pay.simulateFail": "محاكاة دفع فاشل",
+  "pay.amount": "المبلغ",
+  "pay.vat": "ضريبة القيمة المضافة",
+  "pay.total": "الإجمالي",
 };
 
 const DICTS: Record<Lang, Dict> = { ar: AR, en: EN };

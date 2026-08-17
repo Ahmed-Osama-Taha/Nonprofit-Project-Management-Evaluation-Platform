@@ -100,6 +100,15 @@ services:
       # Rate limiting (Redis-backed; no-op without Redis).
       RATE_LIMIT_IP_MAX: ${RATE_LIMIT_IP_MAX:-300}
       RATE_LIMIT_TENANT_MAX: ${RATE_LIMIT_TENANT_MAX:-600}
+      # Payments (Model A). Runs in MOCK mode with no keys; set TAP_SECRET_KEY
+      # (+ TAP_WEBHOOK_SECRET) to switch to real Tap automatically.
+      PAYMENTS_ENABLED: ${PAYMENTS_ENABLED:-true}
+      PAYMENT_CURRENCY: ${PAYMENT_CURRENCY:-SAR}
+      PAYMENT_RETURN_URL: ${PAYMENT_RETURN_URL:-http://localhost:3000/payments/return}
+      PRICE_PER_REVIEW_MINOR: ${PRICE_PER_REVIEW_MINOR:-15000}
+      PRICE_SUBSCRIPTION_MINOR: ${PRICE_SUBSCRIPTION_MINOR:-49900}
+      TAP_SECRET_KEY: ${TAP_SECRET_KEY:-}
+      TAP_WEBHOOK_SECRET: ${TAP_WEBHOOK_SECRET:-}
       # Auth cookies — httpOnly session token (XSS-safe). Set COOKIE_SECURE=true
       # behind HTTPS in production.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
@@ -176,6 +185,11 @@ services:
       AI_ST_MODEL: ${AI_ST_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
       AI_EMBEDDING_DIM: ${AI_EMBEDDING_DIM:-384}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Payments — the reconciliation worker task settles stuck 'pending' charges.
+      PAYMENTS_ENABLED: ${PAYMENTS_ENABLED:-true}
+      PAYMENT_RETURN_URL: ${PAYMENT_RETURN_URL:-http://localhost:3000/payments/return}
+      TAP_SECRET_KEY: ${TAP_SECRET_KEY:-}
+      TAP_WEBHOOK_SECRET: ${TAP_WEBHOOK_SECRET:-}
 
   # Lightweight web UI to browse/query PostgreSQL. Open http://localhost:8080
   # System: PostgreSQL · Server: db · User/Pass/DB: nppm (defaults).

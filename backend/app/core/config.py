@@ -54,6 +54,25 @@ class Settings(BaseSettings):
     clamav_port: int = 3310
     clamav_timeout: int = 30           # seconds
 
+    # Payments — Model A (pay to have a project reviewed). When disabled, the
+    # entitlement gate is off (dev/test submit freely). Works fully in MOCK mode
+    # with no gateway keys; setting TAP_SECRET_KEY auto-switches to real Tap.
+    payments_enabled: bool = False
+    payment_currency: str = "SAR"
+    vat_rate: float = 0.15                     # KSA VAT (15%)
+    # Prices in integer MINOR units (halalas). 15000 = 150.00 SAR.
+    price_per_review_minor: int = 15000        # ex-VAT
+    price_subscription_minor: int = 49900      # ex-VAT, per month
+    subscription_period_days: int = 30
+    # Where the gateway sends the customer back (frontend return page).
+    payment_return_url: str = "http://localhost:3000/payments/return"
+    # Tap gateway credentials — leave blank for MOCK mode. Real values come from
+    # env / Secrets Manager only (never committed). Presence of the secret key
+    # flips the provider from mock -> tap.
+    tap_secret_key: str = ""
+    tap_webhook_secret: str = ""
+    tap_api_base: str = "https://api.tap.company/v2"
+
     # Async broker — when set, AI analysis is enqueued to RabbitMQ and executed
     # by a dramatiq worker (out of the web process). Blank -> the API runs it
     # in-process via FastAPI BackgroundTasks (dev/test fallback).

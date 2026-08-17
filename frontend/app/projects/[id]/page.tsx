@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { Project } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { useI18n, fmtMoney } from "@/lib/i18n";
@@ -260,7 +260,22 @@ function OwnerActions({
       setMsg("✓");
       onChange();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Submission failed");
+      // 402 = payment required (Model A). Start checkout and send the user to
+      // the gateway; they return to /payments/return which submits on success.
+      if (e instanceof ApiError && e.status === 402) {
+        try {
+          const co = await api.checkout("per_review", project.id);
+          if (co.redirect_url) {
+            window.location.href = co.redirect_url;
+            return;
+          }
+          setErr("Could not start payment.");
+        } catch (err) {
+          setErr(err instanceof Error ? err.message : "Could not start payment.");
+        }
+      } else {
+        setErr(e instanceof Error ? e.message : "Submission failed");
+      }
     } finally {
       setBusy(false);
     }
@@ -269,7 +284,10 @@ function OwnerActions({
   return (
     <div className="card">
       <div className="flex-between">
-        <strong>{t("proj.submitConfirm")}</strong>
+        <div>
+          <strong>{t("proj.submitConfirm")}</strong>
+          <div className="small muted">{t("pay.submitHint")}</div>
+        </div>
         <button className="btn btn-success" onClick={submit} disabled={busy}>
           {busy ? t("common.loading") : t("proj.submitConfirm")}
         </button>
