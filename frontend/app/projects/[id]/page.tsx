@@ -88,39 +88,13 @@ function Detail() {
         <AIPanel projectId={p.id} analysis={p.ai_analysis} canRerun onRerun={load} />
       )}
 
-      <div className="card">
-        <div className="card-title">
-          <h3 style={{ margin: 0 }}>{t("common.viewDetails")}</h3>
-        </div>
-        <dl className="kv">
-          <dt>{t("proj.category")}</dt>
-          <dd>{p.category || t("common.none")}</dd>
-          <dt>{t("proj.location")}</dt>
-          <dd>{p.location || t("common.none")}</dd>
-          <dt>{t("proj.budget")}</dt>
-          <dd>{fmtMoney(t, p.requested_budget)}</dd>
-          <dt>{t("proj.targetBeneficiaries")}</dt>
-          <dd>{num(p.target_beneficiaries)}</dd>
-          <dt>{t("proj.duration")}</dt>
-          <dd>
-            {p.duration_months
-              ? `${p.duration_months} ${t("common.months")}`
-              : t("common.none")}
-          </dd>
-        </dl>
-        <Section title={t("proj.summary")} body={p.summary} />
-        <Section title={t("proj.problem")} body={p.problem_statement} />
-        <Section title={t("proj.goals")} body={p.goals} />
-        <Section title={t("proj.kpis")} body={p.kpis} />
-        <Section title={t("proj.beneficiaryDesc")} body={p.beneficiary_description} />
-      </div>
+      <DetailsCard project={p} canEdit={!!canEdit} onSaved={load} />
 
       <Documents project={p} canEdit={!!canEdit} onChange={load} />
 
       {isOwner && (
         <OwnerActions project={p} onChange={load} setMsg={setMsg} setErr={setErr} />
       )}
-      {canEdit && <EditForm project={p} onSaved={load} />}
 
       <Reviews project={p} />
 
@@ -338,9 +312,79 @@ function OwnerActions({
   );
 }
 
-function EditForm({ project, onSaved }: { project: Project; onSaved: () => void }) {
+/** Single source of truth for the project's details: read-only view with an
+ *  inline "Edit details" toggle (owners, while editable). No more duplicate
+ *  read-only + separate edit-form cards. */
+function DetailsCard({
+  project,
+  canEdit,
+  onSaved,
+}: {
+  project: Project;
+  canEdit: boolean;
+  onSaved: () => void;
+}) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <EditForm
+        project={project}
+        onSaved={() => {
+          setEditing(false);
+          onSaved();
+        }}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
+
+  return (
+    <div className="card">
+      <div className="card-title flex-between">
+        <h3 style={{ margin: 0 }}>{t("common.viewDetails")}</h3>
+        {canEdit && (
+          <button className="btn btn-secondary btn-sm" onClick={() => setEditing(true)}>
+            ✎ {t("flow.edit")}
+          </button>
+        )}
+      </div>
+      <dl className="kv">
+        <dt>{t("proj.category")}</dt>
+        <dd>{project.category || t("common.none")}</dd>
+        <dt>{t("proj.location")}</dt>
+        <dd>{project.location || t("common.none")}</dd>
+        <dt>{t("proj.budget")}</dt>
+        <dd>{fmtMoney(t, project.requested_budget)}</dd>
+        <dt>{t("proj.targetBeneficiaries")}</dt>
+        <dd>{num(project.target_beneficiaries)}</dd>
+        <dt>{t("proj.duration")}</dt>
+        <dd>
+          {project.duration_months
+            ? `${project.duration_months} ${t("common.months")}`
+            : t("common.none")}
+        </dd>
+      </dl>
+      <Section title={t("proj.summary")} body={project.summary} />
+      <Section title={t("proj.problem")} body={project.problem_statement} />
+      <Section title={t("proj.goals")} body={project.goals} />
+      <Section title={t("proj.kpis")} body={project.kpis} />
+      <Section title={t("proj.beneficiaryDesc")} body={project.beneficiary_description} />
+    </div>
+  );
+}
+
+function EditForm({
+  project,
+  onSaved,
+  onCancel,
+}: {
+  project: Project;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     title: project.title,
     summary: project.summary || "",
@@ -382,7 +426,6 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
           ? Number(form.target_beneficiaries)
           : null,
       });
-      setOpen(false);
       onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
@@ -395,19 +438,10 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  if (!open)
-    return (
-      <div className="card">
-        <button className="btn btn-secondary" onClick={() => setOpen(true)}>
-          ✎ {t("common.viewDetails")}
-        </button>
-      </div>
-    );
-
   return (
     <div className="card">
       <div className="card-title">
-        <h3 style={{ margin: 0 }}>✎ {t("common.viewDetails")}</h3>
+        <h3 style={{ margin: 0 }}>✎ {t("flow.edit")}</h3>
       </div>
       {err && <div className="error">{err}</div>}
       <div className="field">
@@ -498,7 +532,7 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
         <button className="btn" onClick={save} disabled={busy}>
           {busy ? t("common.loading") : t("common.save")}
         </button>
-        <button className="btn btn-secondary" onClick={() => setOpen(false)}>
+        <button className="btn btn-secondary" onClick={onCancel}>
           {t("common.cancel")}
         </button>
       </div>
