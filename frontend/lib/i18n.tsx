@@ -195,8 +195,23 @@ const EN: Dict = {
   "pay.simulatePay": "Simulate successful payment",
   "pay.simulateFail": "Simulate failed payment",
   "pay.amount": "Amount",
-  "pay.vat": "VAT",
+  "pay.vat": "VAT (15%)",
   "pay.total": "Total",
+  // Checkout
+  "checkout.title": "Review payment",
+  "checkout.for": "You're paying to have this project reviewed:",
+  "checkout.choose": "Choose how to pay",
+  "checkout.perReview": "Pay per review",
+  "checkout.perReviewDesc": "One-time payment for this project's review.",
+  "checkout.subscription": "Monthly subscription",
+  "checkout.subDesc": "Unlimited reviews for {days} days. Best value if you submit often.",
+  "checkout.oneReview": "1 review",
+  "checkout.perMonth": "/ month",
+  "checkout.proceed": "Proceed to payment",
+  "checkout.cancel": "Cancel",
+  "checkout.secured": "Payment is processed securely by the gateway. We never see or store your card details.",
+  "checkout.vatIncluded": "Prices include 15% VAT.",
+  "checkout.starting": "Starting secure payment…",
 };
 
 const AR: Dict = {
@@ -374,8 +389,23 @@ const AR: Dict = {
   "pay.simulatePay": "محاكاة دفع ناجح",
   "pay.simulateFail": "محاكاة دفع فاشل",
   "pay.amount": "المبلغ",
-  "pay.vat": "ضريبة القيمة المضافة",
+  "pay.vat": "ضريبة القيمة المضافة (15%)",
   "pay.total": "الإجمالي",
+  // Checkout
+  "checkout.title": "دفع رسوم المراجعة",
+  "checkout.for": "أنت تدفع لمراجعة هذا المشروع:",
+  "checkout.choose": "اختر طريقة الدفع",
+  "checkout.perReview": "الدفع لكل مراجعة",
+  "checkout.perReviewDesc": "دفعة واحدة لمراجعة هذا المشروع.",
+  "checkout.subscription": "اشتراك شهري",
+  "checkout.subDesc": "مراجعات غير محدودة لمدة {days} يوماً. الأفضل إذا كنت تُرسل كثيراً.",
+  "checkout.oneReview": "مراجعة واحدة",
+  "checkout.perMonth": "/ شهرياً",
+  "checkout.proceed": "المتابعة إلى الدفع",
+  "checkout.cancel": "إلغاء",
+  "checkout.secured": "تتم معالجة الدفع بأمان عبر البوابة. لا نرى بيانات بطاقتك ولا نخزّنها.",
+  "checkout.vatIncluded": "الأسعار شاملة ضريبة القيمة المضافة 15%.",
+  "checkout.starting": "جارٍ بدء الدفع الآمن…",
 };
 
 const DICTS: Record<Lang, Dict> = { ar: AR, en: EN };

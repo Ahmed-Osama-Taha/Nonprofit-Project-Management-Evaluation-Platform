@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { Project } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
@@ -247,6 +247,7 @@ function OwnerActions({
   setErr: (s: string) => void;
 }) {
   const { t } = useI18n();
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const canSubmit = ["draft", "changes_requested"].includes(project.status);
   if (!canSubmit) return null;
@@ -260,22 +261,14 @@ function OwnerActions({
       setMsg("✓");
       onChange();
     } catch (e) {
-      // 402 = payment required (Model A). Start checkout and send the user to
-      // the gateway; they return to /payments/return which submits on success.
+      // 402 = payment required (Model A). Send the user to the checkout screen
+      // where they see the price + VAT and choose how to pay — never redirect
+      // straight to a gateway without showing the amount.
       if (e instanceof ApiError && e.status === 402) {
-        try {
-          const co = await api.checkout("per_review", project.id);
-          if (co.redirect_url) {
-            window.location.href = co.redirect_url;
-            return;
-          }
-          setErr("Could not start payment.");
-        } catch (err) {
-          setErr(err instanceof Error ? err.message : "Could not start payment.");
-        }
-      } else {
-        setErr(e instanceof Error ? e.message : "Submission failed");
+        router.push(`/projects/${project.id}/checkout`);
+        return;
       }
+      setErr(e instanceof Error ? e.message : "Submission failed");
     } finally {
       setBusy(false);
     }

@@ -324,6 +324,29 @@ label .req { color: var(--danger); margin-inline-start: 3px; }
 .empty h3 { margin: 6px 0 0; font-size: 18px; }
 .empty p { margin: 0; color: var(--muted); max-width: 42ch; }
 
+/* ── Payment option cards (checkout) ─────────────────── */
+.pay-option {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: start;
+  background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px; cursor: pointer; font-family: inherit; color: var(--text);
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.pay-option:hover { border-color: var(--brand); }
+.pay-option.selected { border-color: var(--brand); box-shadow: var(--ring); background: var(--brand-soft); }
+.pay-option .radio {
+  width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border);
+  flex: none; position: relative; transition: border-color .15s;
+}
+.pay-option.selected .radio { border-color: var(--brand); }
+.pay-option.selected .radio::after {
+  content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--brand);
+}
+.pay-option .po-body { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.pay-option .po-title { font-weight: 700; }
+.pay-option .po-desc { font-size: 12px; color: var(--muted); }
+.pay-option .po-price { font-weight: 800; white-space: nowrap; }
+.pay-option .po-suffix { font-weight: 600; font-size: 12px; color: var(--muted); }
+
 /* ── Skeleton ────────────────────────────────────── */
 .skel { background: linear-gradient(90deg, var(--border) 25%, var(--card-2) 37%, var(--border) 63%); background-size: 400% 100%; animation: shimmer 1.3s ease infinite; border-radius: 8px; }
 @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
