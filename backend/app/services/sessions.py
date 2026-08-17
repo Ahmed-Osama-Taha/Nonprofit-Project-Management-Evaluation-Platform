@@ -103,21 +103,49 @@ def lookup_location(ip: str | None) -> str | None:
     except ValueError:
         return None
 
+    # 1) Local MaxMind GeoLite2 DB (offline; resolves IPv4 + IPv6).
     db_path = getattr(settings, "geoip_db_path", "") or ""
-    if not db_path:
-        return None
-    try:  # geoip2 + a local DB are both optional; missing either -> no location.
-        import geoip2.database  # type: ignore
+    if db_path:
+        try:
+            import geoip2.database  # type: ignore
 
-        with geoip2.database.Reader(db_path) as reader:
-            r = reader.city(ip)
-            parts = [
-                r.city.name,
-                r.subdivisions.most_specific.name if r.subdivisions else None,
-                r.country.iso_code,
-            ]
-            return ", ".join(p for p in parts if p) or None
-    except Exception:  # noqa: BLE001 — geo is a nicety, never fail the request
+            with geoip2.database.Reader(db_path) as reader:
+                r = reader.city(ip)
+                parts = [
+                    r.city.name,
+                    r.subdivisions.most_specific.name if r.subdivisions else None,
+                    r.country.iso_code,
+                ]
+                loc = ", ".join(p for p in parts if p)
+                if loc:
+                    return loc
+        except Exception:  # noqa: BLE001 — geo is a nicety, never fail login
+            pass
+
+    # 2) Optional HTTPS geo API fallback (opt-in; no external calls by default).
+    if getattr(settings, "geoip_api_enabled", False):
+        return _lookup_via_api(ip)
+    return None
+
+
+def _lookup_via_api(ip: str) -> str | None:
+    """Best-effort coarse geolocation via an HTTPS API. Timeout-guarded and
+    fully swallowed on error so a slow/blocked lookup never delays login."""
+    try:
+        import httpx
+
+        url = settings.geoip_api_url.format(ip=ip)
+        r = httpx.get(url, timeout=3, headers={"User-Agent": "athar/1.0"})
+        if r.status_code != 200:
+            return None
+        d = r.json()
+        parts = [
+            d.get("city"),
+            d.get("region") or d.get("region_code"),
+            d.get("country_code") or d.get("country"),
+        ]
+        return ", ".join(str(p) for p in parts if p) or None
+    except Exception:  # noqa: BLE001 — never fail a login on geolocation
         return None
 
 
@@ -127,12 +155,14 @@ def create_session(
 ) -> UserSession:
     ua = request.headers.get("user-agent")
     ip = client_ip(request)
+    # Always derive a coarse location, but only PERSIST the raw IP when the
+    # privacy switch allows it (off by default for shared demos).
     session = UserSession(
         user_id=user.id,
         refresh_jti=refresh_jti,
         device=parse_device(ua),
         user_agent=(ua or "")[:512] or None,
-        ip=ip,
+        ip=ip if settings.session_store_ip else None,
         location=lookup_location(ip),
     )
     db.add(session)
@@ -148,7 +178,7 @@ def touch_session(
     session.last_seen_at = datetime.now(timezone.utc)
     ip = client_ip(request)
     if ip:
-        session.ip = ip
+        session.ip = ip if settings.session_store_ip else None
         session.location = lookup_location(ip)
 
 
