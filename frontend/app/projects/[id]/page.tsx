@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { Project } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { useI18n, fmtMoney } from "@/lib/i18n";
@@ -140,12 +140,14 @@ function Documents({
   const [err, setErr] = useState("");
 
   async function upload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
     setBusy(true);
     setErr("");
     try {
-      await api.uploadDocument(project.id, file);
+      for (const file of files) {
+        await api.uploadDocument(project.id, file);
+      }
       onChange();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Upload failed");
@@ -160,6 +162,16 @@ function Documents({
     window.open(url, "_blank");
   }
 
+  async function remove(docId: string) {
+    setErr("");
+    try {
+      await api.deleteDocument(project.id, docId);
+      onChange();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Delete failed");
+    }
+  }
+
   return (
     <div className="card">
       <div className="card-title">
@@ -169,6 +181,8 @@ function Documents({
             {busy ? t("common.loading") : `+ ${t("proj.upload")}`}
             <input
               type="file"
+              multiple
+              accept=".pdf,.docx,.txt,.md,.csv"
               onChange={upload}
               style={{ display: "none" }}
               disabled={busy}
@@ -176,6 +190,11 @@ function Documents({
           </label>
         )}
       </div>
+      {canEdit && (
+        <p className="small muted" style={{ marginTop: 6 }}>
+          PDF · DOCX · TXT · MD · CSV — up to 20 MB each. You can add several.
+        </p>
+      )}
       {err && (
         <div className="error" style={{ marginTop: 10 }}>
           {err}
@@ -193,8 +212,20 @@ function Documents({
               >
                 {d.filename}
               </button>
-              <span className="small muted">
-                {d.content_type} · {d.extraction_status}
+              <span className="flex" style={{ gap: 10, alignItems: "center" }}>
+                <span className="small muted">
+                  {d.content_type} · {d.extraction_status}
+                </span>
+                {canEdit && (
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={() => remove(d.id)}
+                    disabled={busy}
+                    aria-label="Delete document"
+                  >
+                    ✕
+                  </button>
+                )}
               </span>
             </div>
           ))}
@@ -229,7 +260,22 @@ function OwnerActions({
       setMsg("✓");
       onChange();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Submission failed");
+      // 402 = payment required (Model A). Start checkout and send the user to
+      // the gateway; they return to /payments/return which submits on success.
+      if (e instanceof ApiError && e.status === 402) {
+        try {
+          const co = await api.checkout("per_review", project.id);
+          if (co.redirect_url) {
+            window.location.href = co.redirect_url;
+            return;
+          }
+          setErr("Could not start payment.");
+        } catch (err) {
+          setErr(err instanceof Error ? err.message : "Could not start payment.");
+        }
+      } else {
+        setErr(e instanceof Error ? e.message : "Submission failed");
+      }
     } finally {
       setBusy(false);
     }
@@ -238,7 +284,10 @@ function OwnerActions({
   return (
     <div className="card">
       <div className="flex-between">
-        <strong>{t("proj.submitConfirm")}</strong>
+        <div>
+          <strong>{t("proj.submitConfirm")}</strong>
+          <div className="small muted">{t("pay.submitHint")}</div>
+        </div>
         <button className="btn btn-success" onClick={submit} disabled={busy}>
           {busy ? t("common.loading") : t("proj.submitConfirm")}
         </button>
@@ -253,25 +302,39 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
   const [form, setForm] = useState({
     title: project.title,
     summary: project.summary || "",
+    category: project.category || "",
+    location: project.location || "",
     problem_statement: project.problem_statement || "",
     goals: project.goals || "",
     kpis: project.kpis || "",
+    beneficiary_description: project.beneficiary_description || "",
     requested_budget: project.requested_budget?.toString() || "",
+    currency: project.currency || "SAR",
+    duration_months: project.duration_months?.toString() || "",
     target_beneficiaries: project.target_beneficiaries?.toString() || "",
   });
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
 
   async function save() {
     setBusy(true);
+    setErr("");
     try {
       await api.updateProject(project.id, {
         title: form.title,
         summary: form.summary,
+        category: form.category || null,
+        location: form.location || null,
         problem_statement: form.problem_statement,
         goals: form.goals,
         kpis: form.kpis,
+        beneficiary_description: form.beneficiary_description || null,
         requested_budget: form.requested_budget
           ? Number(form.requested_budget)
+          : null,
+        currency: form.currency || "SAR",
+        duration_months: form.duration_months
+          ? Number(form.duration_months)
           : null,
         target_beneficiaries: form.target_beneficiaries
           ? Number(form.target_beneficiaries)
@@ -279,6 +342,8 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
       });
       setOpen(false);
       onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -292,7 +357,7 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
     return (
       <div className="card">
         <button className="btn btn-secondary" onClick={() => setOpen(true)}>
-          {t("proj.title")} ✎
+          ✎ {t("common.viewDetails")}
         </button>
       </div>
     );
@@ -300,11 +365,28 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
   return (
     <div className="card">
       <div className="card-title">
-        <h3 style={{ margin: 0 }}>{t("proj.title")}</h3>
+        <h3 style={{ margin: 0 }}>✎ {t("common.viewDetails")}</h3>
       </div>
+      {err && <div className="error">{err}</div>}
       <div className="field">
         <label>{t("proj.title")}</label>
         <input value={form.title} onChange={(e) => set("title", e.target.value)} />
+      </div>
+      <div className="row">
+        <div className="field">
+          <label>{t("proj.category")}</label>
+          <input
+            value={form.category}
+            onChange={(e) => set("category", e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label>{t("proj.location")}</label>
+          <input
+            value={form.location}
+            onChange={(e) => set("location", e.target.value)}
+          />
+        </div>
       </div>
       <div className="field">
         <label>{t("proj.summary")}</label>
@@ -328,6 +410,13 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
         <label>{t("proj.kpis")}</label>
         <textarea value={form.kpis} onChange={(e) => set("kpis", e.target.value)} />
       </div>
+      <div className="field">
+        <label>{t("proj.beneficiaryDesc")}</label>
+        <textarea
+          value={form.beneficiary_description}
+          onChange={(e) => set("beneficiary_description", e.target.value)}
+        />
+      </div>
       <div className="row">
         <div className="field">
           <label>{t("proj.budget")}</label>
@@ -335,6 +424,23 @@ function EditForm({ project, onSaved }: { project: Project; onSaved: () => void 
             type="number"
             value={form.requested_budget}
             onChange={(e) => set("requested_budget", e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label>{t("proj.currency")}</label>
+          <input
+            value={form.currency}
+            onChange={(e) => set("currency", e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="row">
+        <div className="field">
+          <label>{t("proj.duration")}</label>
+          <input
+            type="number"
+            value={form.duration_months}
+            onChange={(e) => set("duration_months", e.target.value)}
           />
         </div>
         <div className="field">

@@ -6,9 +6,12 @@ import type {
   DashboardStats,
   DocumentFile,
   Notification,
+  Payment,
+  Pricing,
   Project,
   Review,
   ReviewerDashboard,
+  SessionInfo,
   User,
 } from "./types";
 
@@ -109,6 +112,13 @@ export const api = {
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   me: () => request<User>("/api/auth/me"),
 
+  // Active sessions (device activity log)
+  sessions: () => request<SessionInfo[]>("/api/auth/sessions"),
+  revokeSession: (id: string) =>
+    request<void>(`/api/auth/sessions/${id}`, { method: "DELETE" }),
+  revokeOtherSessions: () =>
+    request<void>("/api/auth/sessions/revoke-others", { method: "POST" }),
+
   // Projects
   listProjects: (params?: { status?: string; category?: string; q?: string }) => {
     const qs = new URLSearchParams();
@@ -136,9 +146,25 @@ export const api = {
   },
   downloadDocument: (id: string, docId: string) =>
     request<{ url: string }>(`/api/projects/${id}/documents/${docId}/download`),
+  deleteDocument: (id: string, docId: string) =>
+    request<void>(`/api/projects/${id}/documents/${docId}`, { method: "DELETE" }),
   chat: (id: string, question: string, language = "ar") =>
     request<{ answer: string; sources: string[] }>(`/api/projects/${id}/chat`, {
       body: { question, language },
+    }),
+
+  // Payments (Model A: pay to have a project reviewed)
+  pricing: () => request<Pricing>("/api/payments/pricing"),
+  checkout: (kind: "per_review" | "subscription", projectId?: string) =>
+    request<{ payment_id: string; status: string; redirect_url?: string | null }>(
+      "/api/payments/checkout",
+      { body: { kind, project_id: projectId } }
+    ),
+  listPayments: () => request<Payment[]>("/api/payments"),
+  getPayment: (id: string) => request<Payment>(`/api/payments/${id}`),
+  mockCompletePayment: (chargeId: string, outcome: "paid" | "failed" | "expired") =>
+    request<Payment>(`/api/payments/mock/${chargeId}/complete`, {
+      body: { outcome },
     }),
 
   // Reviews

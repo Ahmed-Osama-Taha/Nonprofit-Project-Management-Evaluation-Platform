@@ -89,3 +89,25 @@ def cache_delete(*keys: str) -> None:
         r.delete(*keys)
     except Exception:  # noqa: BLE001
         pass
+
+
+# --------------------------------------------------------------------------- #
+# Rate limiting (fixed window; best-effort — no Redis -> unlimited)
+# --------------------------------------------------------------------------- #
+def rate_incr(key: str, window_seconds: int) -> int | None:
+    """Increment a fixed-window counter and return the new count.
+
+    Returns None when Redis is unavailable (caller should treat as 'allow').
+    The window key should already encode the time bucket so the counter resets
+    each window; we set the TTL on first increment.
+    """
+    r = get_redis()
+    if not r:
+        return None
+    try:
+        count = r.incr(key)
+        if count == 1:
+            r.expire(key, max(1, window_seconds))
+        return int(count)
+    except Exception:  # noqa: BLE001 — never let the limiter break a request
+        return None

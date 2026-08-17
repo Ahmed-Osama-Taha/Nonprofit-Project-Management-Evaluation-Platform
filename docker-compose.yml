@@ -45,6 +45,22 @@ services:
       timeout: 5s
       retries: 10
 
+  # Antivirus daemon (clamd). Scans every uploaded document over INSTREAM.
+  # First boot downloads virus definitions via freshclam (can take a couple of
+  # minutes); uploads fail closed (503) until it's ready, then self-heal.
+  clamav:
+    image: clamav/clamav:latest
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --ping 1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
   # Message broker for async AI analysis (dramatiq). Management UI on :15672.
   rabbitmq:
     image: rabbitmq:3-management
@@ -71,11 +87,28 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_started
+      clamav:
+        condition: service_started
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://nppm:nppm@db:5432/nppm}
       SECRET_KEY: ${SECRET_KEY:-dev-super-secret-change-me}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      # Antivirus — clamd host for upload scanning (fail-closed when set).
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      # Rate limiting (Redis-backed; no-op without Redis).
+      RATE_LIMIT_IP_MAX: ${RATE_LIMIT_IP_MAX:-300}
+      RATE_LIMIT_TENANT_MAX: ${RATE_LIMIT_TENANT_MAX:-600}
+      # Payments (Model A). Runs in MOCK mode with no keys; set TAP_SECRET_KEY
+      # (+ TAP_WEBHOOK_SECRET) to switch to real Tap automatically.
+      PAYMENTS_ENABLED: ${PAYMENTS_ENABLED:-true}
+      PAYMENT_CURRENCY: ${PAYMENT_CURRENCY:-SAR}
+      PAYMENT_RETURN_URL: ${PAYMENT_RETURN_URL:-http://localhost:3000/payments/return}
+      PRICE_PER_REVIEW_MINOR: ${PRICE_PER_REVIEW_MINOR:-15000}
+      PRICE_SUBSCRIPTION_MINOR: ${PRICE_SUBSCRIPTION_MINOR:-49900}
+      TAP_SECRET_KEY: ${TAP_SECRET_KEY:-}
+      TAP_WEBHOOK_SECRET: ${TAP_WEBHOOK_SECRET:-}
       # Auth cookies — httpOnly session token (XSS-safe). Set COOKIE_SECURE=true
       # behind HTTPS in production.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
@@ -152,6 +185,11 @@ services:
       AI_ST_MODEL: ${AI_ST_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
       AI_EMBEDDING_DIM: ${AI_EMBEDDING_DIM:-384}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Payments — the reconciliation worker task settles stuck 'pending' charges.
+      PAYMENTS_ENABLED: ${PAYMENTS_ENABLED:-true}
+      PAYMENT_RETURN_URL: ${PAYMENT_RETURN_URL:-http://localhost:3000/payments/return}
+      TAP_SECRET_KEY: ${TAP_SECRET_KEY:-}
+      TAP_WEBHOOK_SECRET: ${TAP_WEBHOOK_SECRET:-}
 
   # Lightweight web UI to browse/query PostgreSQL. Open http://localhost:8080
   # System: PostgreSQL · Server: db · User/Pass/DB: nppm (defaults).
@@ -186,3 +224,4 @@ volumes:
   postgres-data:
   minio-data:
   redis-data:
+  clamav-data:

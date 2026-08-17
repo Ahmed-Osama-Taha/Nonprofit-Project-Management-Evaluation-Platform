@@ -75,6 +75,27 @@ class AIAnalysisStatus(str, enum.Enum):
     failed = "failed"
 
 
+class PaymentKind(str, enum.Enum):
+    per_review = "per_review"      # one payment unlocks one project's review
+    subscription = "subscription"  # recurring plan unlocks unlimited reviews
+
+
+class PaymentStatus(str, enum.Enum):
+    initiated = "initiated"  # row created, charge not yet opened at the gateway
+    pending = "pending"      # redirected to the gateway, awaiting outcome
+    paid = "paid"            # confirmed captured
+    failed = "failed"        # declined / cancelled
+    expired = "expired"      # timed out without completion
+    refunded = "refunded"
+
+
+class SubscriptionStatus(str, enum.Enum):
+    active = "active"
+    past_due = "past_due"
+    canceled = "canceled"
+    expired = "expired"
+
+
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -111,6 +132,37 @@ class User(Base, TimestampMixin):
         ForeignKey("organizations.id", ondelete="SET NULL")
     )
     organization: Mapped[Organization | None] = relationship(back_populates="users")
+
+
+class UserSession(Base):
+    """A login session = one refresh-token family for one device/browser.
+
+    Created at login; the refresh jti rotates on every /refresh while the row's
+    id (the token `sid`) stays stable, so the user sees one continuous session
+    per device. Lets a user list active sessions and remotely sign one out.
+    """
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Current refresh-token jti for this session (rotates on refresh).
+    refresh_jti: Mapped[str | None] = mapped_column(String(64), index=True)
+    device: Mapped[str | None] = mapped_column(String(128))   # "Chrome (Windows)"
+    user_agent: Mapped[str | None] = mapped_column(String(512))
+    ip: Mapped[str | None] = mapped_column(String(64))
+    location: Mapped[str | None] = mapped_column(String(128))  # best-effort geo
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship()
 
 
 class Project(Base, TimestampMixin):
@@ -171,6 +223,9 @@ class Document(Base, TimestampMixin):
     storage_key: Mapped[str] = mapped_column(String(1024), nullable=False)
     extracted_text: Mapped[str | None] = mapped_column(Text)
     extraction_status: Mapped[str] = mapped_column(String(32), default="pending")
+    # AV scan result: "clean" | "skipped" (scanner disabled). Infected uploads
+    # are rejected before a row is ever created, so "infected" is never stored.
+    scan_status: Mapped[str] = mapped_column(String(32), default="skipped")
 
     project: Mapped[Project] = relationship(back_populates="documents")
 
@@ -240,6 +295,84 @@ class Review(Base, TimestampMixin):
 
     project: Mapped[Project] = relationship(back_populates="reviews")
     reviewer: Mapped[User] = relationship()
+
+
+class Payment(Base, TimestampMixin):
+    """A single payment attempt (per-review charge or subscription checkout).
+
+    Money is stored in integer **minor units** (halalas) to avoid float rounding
+    — legal/accounting correctness. Card data is NEVER stored here (PCI SAQ-A):
+    only the gateway's opaque charge id and status. The signed webhook is the
+    source of truth; ``idempotency_key`` makes checkout retries safe.
+    """
+
+    __tablename__ = "payments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"), index=True
+    )  # set for per_review; null for subscription
+
+    kind: Mapped[PaymentKind] = mapped_column(Enum(PaymentKind), nullable=False)
+    status: Mapped[PaymentStatus] = mapped_column(
+        Enum(PaymentStatus), default=PaymentStatus.initiated, nullable=False, index=True
+    )
+
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)      # ex-VAT
+    vat_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_minor: Mapped[int] = mapped_column(Integer, nullable=False)       # amount+VAT
+    currency: Mapped[str] = mapped_column(String(8), default="SAR")
+
+    provider: Mapped[str] = mapped_column(String(32), default="mock")
+    provider_charge_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), unique=True)
+    redirect_url: Mapped[str | None] = mapped_column(String(1024))
+    failure_reason: Mapped[str | None] = mapped_column(String(255))
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    organization: Mapped[Organization] = relationship()
+
+
+class WebhookEvent(Base):
+    """Append-only log of gateway webhook deliveries — the source of truth for
+    payment status. ``event_id`` is unique so a redelivered webhook is processed
+    at most once (idempotent)."""
+
+    __tablename__ = "webhook_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    charge_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    signature_valid: Mapped[bool] = mapped_column(default=False)
+    payload: Mapped[dict | None] = mapped_column(JSONB)
+    processed: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
+class Subscription(Base, TimestampMixin):
+    __tablename__ = "subscriptions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status: Mapped[SubscriptionStatus] = mapped_column(
+        Enum(SubscriptionStatus), default=SubscriptionStatus.active, nullable=False
+    )
+    current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    provider: Mapped[str] = mapped_column(String(32), default="mock")
+    provider_ref: Mapped[str | None] = mapped_column(String(128))
+
+    organization: Mapped[Organization] = relationship()
 
 
 class Notification(Base):

@@ -44,3 +44,19 @@ def run_analysis_task(project_id: str, language: str = "ar") -> None:
             analysis_service.run_analysis(db, project, language, force=True)
     finally:
         db.close()
+
+
+@dramatiq.actor(max_retries=2, time_limit=120_000)
+def reconcile_payments_task(older_than_seconds: int = 120) -> None:
+    """Settle payments stuck in 'pending' by polling the gateway — the backstop
+    for a lost/late webhook. Schedule this periodically (e.g. every minute) so a
+    customer who paid is never left un-entitled even if the webhook never
+    arrives."""
+    from app.core.db import SessionLocal
+    from app.services.payments import service as pay
+
+    db = SessionLocal()
+    try:
+        pay.reconcile_stale(db, older_than_seconds)
+    finally:
+        db.close()

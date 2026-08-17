@@ -10,7 +10,9 @@ from fastapi import (
     File,
     HTTPException,
     Query,
+    Response,
     UploadFile,
+    status,
 )
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -37,10 +39,12 @@ from app.schemas import (
     ProjectUpdate,
 )
 from app.services import analysis as analysis_service
+from app.services import antivirus
 from app.services import storage
 from app.services.ai import AINotConfigured
 from app.services.audit import notify, record_audit
 from app.services.extraction import extract_text
+from app.services.upload_security import validate_upload
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -220,28 +224,56 @@ async def upload_document(
     _authorize_edit(project, user)
 
     data = await file.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File exceeds 20 MB limit")
+    # Validate BEFORE touching storage: extension allowlist + magic-byte sniff +
+    # executable rejection + text safety. The client Content-Type is ignored.
+    safe_name, content_type, ext = validate_upload(file.filename or "", data)
+
+    # Antivirus scan (fail closed): reject infected files, and — when AV is
+    # enabled but the scanner is unreachable — refuse the upload rather than
+    # store something unscanned. No-op (scan_status="skipped") when disabled.
+    scan_status = "skipped"
+    if antivirus.av_enabled():
+        try:
+            clean, signature = antivirus.scan_bytes(data)
+        except antivirus.AVUnavailable:
+            raise HTTPException(
+                status_code=503,
+                detail="File could not be virus-scanned; please try again shortly.",
+            )
+        if not clean:
+            record_audit(
+                db, actor=user, action="document.malware_blocked",
+                entity_type="project", entity_id=project_id,
+                detail={"filename": safe_name, "signature": signature},
+            )
+            db.commit()
+            raise HTTPException(
+                status_code=422,
+                detail=f"File rejected: malware detected ({signature}).",
+            )
+        scan_status = "clean"
 
     storage.ensure_bucket()
-    key = f"projects/{project_id}/{uuid.uuid4()}-{file.filename}"
-    storage.upload_bytes(key, data, file.content_type)
+    # The object key never contains user-controlled text (uuid + validated ext).
+    key = f"projects/{project_id}/{uuid.uuid4()}{ext}"
+    storage.upload_bytes(key, data, content_type)
 
     text = ""
     extraction_status = "done"
     try:
-        text = extract_text(file.filename or "", file.content_type, data)
+        text = extract_text(safe_name, content_type, data)
     except Exception:  # noqa: BLE001 — file stored even if extraction fails
         extraction_status = "failed"
 
     doc = Document(
         project_id=project_id,
-        filename=file.filename or "upload",
-        content_type=file.content_type,
+        filename=safe_name,
+        content_type=content_type,
         size_bytes=len(data),
         storage_key=key,
         extracted_text=text or None,
         extraction_status=extraction_status if text else "empty",
+        scan_status=scan_status,
     )
     db.add(doc)
     record_audit(
@@ -265,7 +297,37 @@ def download_document(
     doc = db.get(Document, document_id)
     if not doc or doc.project_id != project_id:
         raise HTTPException(status_code=404, detail="Document not found")
-    return {"url": storage.presigned_url(doc.storage_key)}
+    # Force download-as-attachment with a safe content type so the browser never
+    # renders/executes the file inline.
+    return {
+        "url": storage.presigned_url(
+            doc.storage_key, filename=doc.filename, content_type=doc.content_type
+        )
+    }
+
+
+@router.delete("/{project_id}/documents/{document_id}", status_code=204)
+def delete_document(
+    project_id: str,
+    document_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    """Remove a document — only the owning org, and only while editable."""
+    project = _load_project(db, project_id)
+    _authorize_edit(project, user)
+    doc = db.get(Document, document_id)
+    if not doc or doc.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Document not found")
+    storage.delete_object(doc.storage_key)
+    filename = doc.filename
+    db.delete(doc)
+    record_audit(
+        db, actor=user, action="document.delete", entity_type="document",
+        entity_id=document_id, detail={"project_id": project_id, "filename": filename},
+    )
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ── Workflow: submit ─────────────────────────────────────────
@@ -288,6 +350,16 @@ def submit_project(
         raise HTTPException(
             status_code=422,
             detail="Problem statement and goals are required before submission",
+        )
+
+    # Entitlement gate (Model A): a review must be paid for — via an active
+    # subscription or a per-review payment. No-op unless payments are enabled.
+    from app.services.payments import service as pay
+
+    if not pay.has_entitlement(db, project.organization_id, project):
+        raise HTTPException(
+            status_code=402,
+            detail="Payment required: purchase a review or subscribe to submit.",
         )
 
     project.status = ProjectStatus.submitted

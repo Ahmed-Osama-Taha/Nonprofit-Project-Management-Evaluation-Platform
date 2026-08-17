@@ -251,7 +251,86 @@ tr.clickable:hover { background: var(--brand-soft); cursor: pointer; }
 .legend { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .legend .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-inline-end: 7px; }
 
+/* ── Page header ─────────────────────────────────── */
+.page-head { margin-bottom: 18px; }
+.page-head h1 { margin: 0 0 4px; font-size: 24px; }
+.page-head .sub { color: var(--muted); font-size: 14px; }
+
+/* ── Field hint ──────────────────────────────────── */
+.field .hint { color: var(--muted); font-size: 12px; margin-top: 5px; font-weight: 400; }
+label .req { color: var(--danger); margin-inline-start: 3px; }
+
+/* ── Stepper ─────────────────────────────────────── */
+.stepper { display: flex; align-items: flex-start; gap: 0; margin-bottom: 22px; }
+.stepper .step { display: flex; flex-direction: column; align-items: center; gap: 7px; flex: 1; position: relative; text-align: center; }
+.stepper .step .dot {
+  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 800; font-size: 14px; background: var(--card); border: 2px solid var(--border);
+  color: var(--muted); z-index: 2; transition: all .2s;
+}
+.stepper .step .cap { font-size: 12px; font-weight: 600; color: var(--muted); max-width: 12ch; }
+.stepper .step.active .dot { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: var(--ring); }
+.stepper .step.active .cap { color: var(--text); }
+.stepper .step.done .dot { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-700); }
+.stepper .step.done .cap { color: var(--text); }
+.stepper .step::before,
+.stepper .step::after {
+  content: ""; position: absolute; top: 16px; height: 2px; background: var(--border); z-index: 1;
+}
+.stepper .step::before { inset-inline-start: 0; width: 50%; }
+.stepper .step::after { inset-inline-end: 0; width: 50%; }
+.stepper .step:first-child::before,
+.stepper .step:last-child::after { display: none; }
+.stepper .step.done::before, .stepper .step.done::after,
+.stepper .step.active::before { background: var(--brand); }
+
+.wizard-foot {
+  display: flex; justify-content: space-between; gap: 10px; align-items: center;
+  margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border);
+}
+.step-panel { animation: fade-in .2s ease; }
+@keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ── Segmented tabs / filter ─────────────────────── */
+.tabs { display: inline-flex; gap: 4px; padding: 4px; background: var(--card-2); border: 1px solid var(--border); border-radius: 999px; flex-wrap: wrap; }
+.tabs button {
+  border: none; background: transparent; color: var(--muted); font-weight: 600; font-size: 13px;
+  padding: 7px 14px; border-radius: 999px; cursor: pointer; font-family: inherit; transition: all .15s;
+}
+.tabs button:hover { color: var(--text); }
+.tabs button.active { background: var(--brand); color: #fff; box-shadow: var(--shadow); }
+.tabs button .count { opacity: .7; font-weight: 700; margin-inline-start: 5px; font-size: 12px; }
+
+/* ── Project card grid ───────────────────────────── */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.proj-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 18px; display: flex; flex-direction: column; gap: 12px;
+  transition: transform .12s, box-shadow .15s, border-color .15s; text-decoration: none; color: inherit;
+}
+.proj-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--brand); text-decoration: none; }
+.proj-card .pc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.proj-card .pc-title { font-weight: 700; font-size: 16px; color: var(--text); line-height: 1.35; }
+.proj-card .pc-meta { color: var(--muted); font-size: 13px; }
+.proj-card .pc-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 6px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.proj-card .pc-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ── Empty state ─────────────────────────────────── */
+.empty {
+  background: var(--card); border: 1px dashed var(--border); border-radius: var(--radius);
+  padding: 48px 28px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.empty .ico { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; font-size: 26px; background: var(--brand-soft); color: var(--brand-700); }
+.empty h3 { margin: 6px 0 0; font-size: 18px; }
+.empty p { margin: 0; color: var(--muted); max-width: 42ch; }
+
+/* ── Skeleton ────────────────────────────────────── */
+.skel { background: linear-gradient(90deg, var(--border) 25%, var(--card-2) 37%, var(--border) 63%); background-size: 400% 100%; animation: shimmer 1.3s ease infinite; border-radius: 8px; }
+@keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
 @media (max-width: 720px) {
   .row { grid-template-columns: 1fr; }
   .kv { grid-template-columns: 1fr; }
+  .card-grid { grid-template-columns: 1fr; }
+  .stepper .step .cap { display: none; }
 }

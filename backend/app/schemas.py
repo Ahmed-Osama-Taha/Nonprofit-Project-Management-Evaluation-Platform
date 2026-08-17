@@ -60,6 +60,57 @@ class UserOut(ORMModel):
     created_at: datetime
 
 
+class CheckoutRequest(BaseModel):
+    kind: str  # "per_review" | "subscription"
+    project_id: str | None = None
+
+
+class PaymentOut(ORMModel):
+    id: str
+    kind: str
+    status: str
+    project_id: str | None = None
+    amount_minor: int
+    vat_minor: int
+    total_minor: int
+    currency: str
+    provider: str
+    redirect_url: str | None = None
+    failure_reason: str | None = None
+    created_at: datetime
+    paid_at: datetime | None = None
+
+
+class CheckoutResponse(BaseModel):
+    payment_id: str
+    status: str
+    redirect_url: str | None = None
+
+
+class PricingOut(BaseModel):
+    currency: str
+    vat_rate: float
+    per_review_minor: int
+    per_review_total_minor: int
+    subscription_minor: int
+    subscription_total_minor: int
+    subscription_period_days: int
+
+
+class MockCompleteRequest(BaseModel):
+    outcome: str = "paid"  # "paid" | "failed" | "expired"
+
+
+class SessionOut(ORMModel):
+    id: str
+    device: str | None = None
+    ip: str | None = None
+    location: str | None = None
+    created_at: datetime
+    last_seen_at: datetime
+    current: bool = False
+
+
 # ── Projects ─────────────────────────────────────────────────
 class ProjectBase(BaseModel):
     title: str
@@ -101,6 +152,7 @@ class DocumentOut(ORMModel):
     content_type: str | None = None
     size_bytes: int | None = None
     extraction_status: str
+    scan_status: str = "skipped"
     created_at: datetime
 
 

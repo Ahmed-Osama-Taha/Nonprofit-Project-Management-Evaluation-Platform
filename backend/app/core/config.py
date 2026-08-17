@@ -30,8 +30,48 @@ class Settings(BaseSettings):
     refresh_cookie_name: str = "ath_refresh"
     csrf_cookie_name: str = "ath_csrf"
 
-    # Redis — token denylist (revocation) + caching. Blank disables (no-op).
+    # Session activity log — optional local MaxMind GeoLite2 City DB for coarse
+    # geolocation of login IPs. Blank -> IPs are stored but not geolocated (no
+    # external calls are ever made).
+    geoip_db_path: str = ""
+
+    # Redis — token denylist (revocation) + caching + rate-limit counters.
+    # Blank disables (no-op).
     redis_url: str = ""                # e.g. redis://redis:6379/0
+
+    # Rate limiting (fixed window, Redis-backed). Active only when Redis is
+    # configured; otherwise every request is allowed (dev/test no-op).
+    rate_limit_enabled: bool = True
+    rate_limit_ip_max: int = 300           # requests per IP per window
+    rate_limit_ip_window: int = 60         # seconds
+    rate_limit_tenant_max: int = 600       # requests per organization per window
+    rate_limit_tenant_window: int = 60     # seconds
+
+    # Antivirus — ClamAV daemon (clamd) for uploaded-file scanning. Blank host
+    # disables scanning (dev/test no-op). When a host is set, uploads are scanned
+    # and the flow fails CLOSED (reject) if the scanner can't be reached.
+    clamav_host: str = ""              # e.g. "clamav"
+    clamav_port: int = 3310
+    clamav_timeout: int = 30           # seconds
+
+    # Payments — Model A (pay to have a project reviewed). When disabled, the
+    # entitlement gate is off (dev/test submit freely). Works fully in MOCK mode
+    # with no gateway keys; setting TAP_SECRET_KEY auto-switches to real Tap.
+    payments_enabled: bool = False
+    payment_currency: str = "SAR"
+    vat_rate: float = 0.15                     # KSA VAT (15%)
+    # Prices in integer MINOR units (halalas). 15000 = 150.00 SAR.
+    price_per_review_minor: int = 15000        # ex-VAT
+    price_subscription_minor: int = 49900      # ex-VAT, per month
+    subscription_period_days: int = 30
+    # Where the gateway sends the customer back (frontend return page).
+    payment_return_url: str = "http://localhost:3000/payments/return"
+    # Tap gateway credentials — leave blank for MOCK mode. Real values come from
+    # env / Secrets Manager only (never committed). Presence of the secret key
+    # flips the provider from mock -> tap.
+    tap_secret_key: str = ""
+    tap_webhook_secret: str = ""
+    tap_api_base: str = "https://api.tap.company/v2"
 
     # Async broker — when set, AI analysis is enqueued to RabbitMQ and executed
     # by a dramatiq worker (out of the web process). Blank -> the API runs it
