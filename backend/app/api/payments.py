@@ -27,6 +27,7 @@ from app.schemas import (
     MockCompleteRequest,
     PaymentOut,
     PricingOut,
+    SubscriptionOut,
 )
 from app.services.audit import record_audit
 from app.services.payments import service as pay
@@ -80,6 +81,19 @@ def checkout(
     db.commit()
     return CheckoutResponse(
         payment_id=payment.id, status=payment.status.value, redirect_url=payment.redirect_url
+    )
+
+
+@router.get("/subscription", response_model=SubscriptionOut)
+def my_subscription(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.organization)),
+) -> SubscriptionOut:
+    sub = pay.active_subscription(db, user.organization_id)
+    if not sub:
+        return SubscriptionOut(active=False)
+    return SubscriptionOut(
+        active=True, status=sub.status.value, current_period_end=sub.current_period_end
     )
 
 

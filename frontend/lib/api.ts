@@ -8,6 +8,7 @@ import type {
   Notification,
   Payment,
   Pricing,
+  SubscriptionInfo,
   Project,
   Review,
   ReviewerDashboard,
@@ -161,6 +162,7 @@ export const api = {
       { body: { kind, project_id: projectId } }
     ),
   listPayments: () => request<Payment[]>("/api/payments"),
+  subscription: () => request<SubscriptionInfo>("/api/payments/subscription"),
   getPayment: (id: string) => request<Payment>(`/api/payments/${id}`),
   mockCompletePayment: (chargeId: string, outcome: "paid" | "failed" | "expired") =>
     request<Payment>(`/api/payments/mock/${chargeId}/complete`, {

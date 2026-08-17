@@ -231,6 +231,20 @@ const EN: Dict = {
   "flow.rejected": "This project was not approved. See the review notes below.",
   "flow.backToQueue": "← Back to review queue",
   "flow.edit": "Edit details",
+  // Billing (account page)
+  "bill.title": "Billing",
+  "bill.subscription": "Subscription",
+  "bill.subActive": "Active",
+  "bill.subUntil": "Renews / valid until",
+  "bill.subNone": "No active subscription. You pay per review, or subscribe for unlimited reviews.",
+  "bill.history": "Payment history",
+  "bill.date": "Date",
+  "bill.item": "Item",
+  "bill.amount": "Amount",
+  "bill.status": "Status",
+  "bill.none": "No payments yet.",
+  "bill.kind.per_review": "Project review",
+  "bill.kind.subscription": "Subscription",
 };
 
 const AR: Dict = {
@@ -444,6 +458,20 @@ const AR: Dict = {
   "flow.rejected": "لم تتم الموافقة على هذا المشروع. اطّلع على ملاحظات المراجعة أدناه.",
   "flow.backToQueue": "← العودة إلى قائمة المراجعة",
   "flow.edit": "تعديل التفاصيل",
+  // Billing (account page)
+  "bill.title": "الفوترة",
+  "bill.subscription": "الاشتراك",
+  "bill.subActive": "نشط",
+  "bill.subUntil": "ساري حتى",
+  "bill.subNone": "لا يوجد اشتراك نشط. تدفع لكل مراجعة، أو اشترك لمراجعات غير محدودة.",
+  "bill.history": "سجل المدفوعات",
+  "bill.date": "التاريخ",
+  "bill.item": "البند",
+  "bill.amount": "المبلغ",
+  "bill.status": "الحالة",
+  "bill.none": "لا توجد مدفوعات بعد.",
+  "bill.kind.per_review": "مراجعة مشروع",
+  "bill.kind.subscription": "اشتراك",
 };
 
 const DICTS: Record<Lang, Dict> = { ar: AR, en: EN };
