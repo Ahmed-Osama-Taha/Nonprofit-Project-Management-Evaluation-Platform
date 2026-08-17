@@ -117,6 +117,48 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
   );
 }
 
+/** Horizontal lifecycle indicator for a project's journey. */
+export function ProjectFlow({ status }: { status: string }) {
+  const { t } = useI18n();
+  const steps = [
+    t("flow.draft"),
+    t("flow.submitted"),
+    t("flow.review"),
+    t("flow.decision"),
+  ];
+  const idx =
+    status === "approved" || status === "rejected"
+      ? 3
+      : status === "under_review"
+        ? 2
+        : status === "submitted"
+          ? 1
+          : 0; // draft / changes_requested
+  const rejected = status === "rejected";
+  return (
+    <div className="flow">
+      {steps.map((label, i) => {
+        const state = i === idx ? "active" : i < idx ? "done" : "";
+        return (
+          <div key={label} className={`flow-step ${state}`}>
+            <span
+              className="flow-dot"
+              style={
+                rejected && i === 3
+                  ? { background: "var(--danger)", borderColor: "var(--danger)", color: "#fff" }
+                  : undefined
+              }
+            >
+              {i < idx ? "✓" : i + 1}
+            </span>
+            <span className="flow-cap">{label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Friendly empty state with icon, heading, body and optional action. */
 export function EmptyState({
   icon = "📋",

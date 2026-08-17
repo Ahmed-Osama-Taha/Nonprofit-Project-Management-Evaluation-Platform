@@ -6,8 +6,16 @@ import { api, ApiError } from "@/lib/api";
 import type { Project } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { useI18n, fmtMoney } from "@/lib/i18n";
-import { RequireAuth, StatusBadge, num, dateStr } from "@/components/ui";
+import {
+  RequireAuth,
+  StatusBadge,
+  PageHead,
+  ProjectFlow,
+  num,
+  dateStr,
+} from "@/components/ui";
 import { AIPanel } from "@/components/AIPanel";
+import Link from "next/link";
 
 const EDITABLE = ["draft", "changes_requested"];
 
@@ -58,17 +66,23 @@ function Detail() {
 
   return (
     <>
-      <div className="flex-between" style={{ marginBottom: 14 }}>
-        <div>
-          <h1 style={{ margin: 0 }}>{p.title}</h1>
-          <div className="small muted">
-            {p.organization.name} · {dateStr(p.submitted_at)}
-          </div>
-        </div>
-        <StatusBadge status={p.status} />
-      </div>
+      {isReviewer && (
+        <Link href="/reviewer" className="nav-link" style={{ display: "inline-block", marginBottom: 10 }}>
+          {t("flow.backToQueue")}
+        </Link>
+      )}
+
+      <PageHead
+        title={p.title}
+        sub={`${p.organization.name}${p.submitted_at ? " · " + dateStr(p.submitted_at) : ""}`}
+        action={<StatusBadge status={p.status} />}
+      />
+
+      <ProjectFlow status={p.status} />
 
       {msg && <div className="success-box">{msg}</div>}
+
+      {isOwner && <OwnerStatusBanner status={p.status} />}
 
       {isReviewer && (
         <AIPanel projectId={p.id} analysis={p.ai_analysis} canRerun onRerun={load} />
@@ -124,6 +138,21 @@ function Section({ title, body }: { title: string; body?: string | null }) {
       <p style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{body}</p>
     </div>
   );
+}
+
+/** Contextual status message for the owner on non-editable states. */
+function OwnerStatusBanner({ status }: { status: string }) {
+  const { t } = useI18n();
+  const map: Record<string, { cls: string; key: string }> = {
+    submitted: { cls: "info-box", key: "flow.awaiting" },
+    under_review: { cls: "info-box", key: "flow.inReview" },
+    changes_requested: { cls: "warn-box", key: "flow.changes" },
+    approved: { cls: "success-box", key: "flow.approved" },
+    rejected: { cls: "error", key: "flow.rejected" },
+  };
+  const m = map[status];
+  if (!m) return null;
+  return <div className={m.cls} style={{ marginBottom: 14 }}>{t(m.key)}</div>;
 }
 
 function Documents({
@@ -274,17 +303,37 @@ function OwnerActions({
     }
   }
 
+  const detailsDone = !!(project.problem_statement && project.goals);
+  const docsDone = (project.documents?.length ?? 0) > 0;
+
+  const Item = ({ done, title, hint }: { done: boolean; title: string; hint: string }) => (
+    <div className={`next-item${done ? " done" : ""}`}>
+      <span className="tick">{done ? "✓" : ""}</span>
+      <span>
+        <span className="ni-title">{title}</span>
+        <div className="ni-hint">{hint}</div>
+      </span>
+    </div>
+  );
+
   return (
     <div className="card">
-      <div className="flex-between">
-        <div>
-          <strong>{t("proj.submitConfirm")}</strong>
-          <div className="small muted">{t("pay.submitHint")}</div>
-        </div>
-        <button className="btn btn-success" onClick={submit} disabled={busy}>
-          {busy ? t("common.loading") : t("proj.submitConfirm")}
-        </button>
+      <div className="card-title">
+        <h3 style={{ margin: 0 }}>{t("flow.next")}</h3>
       </div>
+      <div className="next-step" style={{ marginBottom: 16 }}>
+        <Item done={detailsDone} title={t("flow.stepDetails")} hint={t("flow.detailsHint")} />
+        <Item done={docsDone} title={t("flow.stepDocs")} hint={t("flow.docsHint")} />
+        <Item done={false} title={t("flow.stepSubmit")} hint={t("flow.submitHint")} />
+      </div>
+      <button
+        className="btn btn-success"
+        onClick={submit}
+        disabled={busy || !detailsDone}
+        title={!detailsDone ? t("flow.detailsHint") : undefined}
+      >
+        {busy ? t("common.loading") : t("proj.submitConfirm")}
+      </button>
     </div>
   );
 }

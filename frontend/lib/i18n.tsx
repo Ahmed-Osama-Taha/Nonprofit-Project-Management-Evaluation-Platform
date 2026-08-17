@@ -212,6 +212,25 @@ const EN: Dict = {
   "checkout.secured": "Payment is processed securely by the gateway. We never see or store your card details.",
   "checkout.vatIncluded": "Prices include 15% VAT.",
   "checkout.starting": "Starting secure payment…",
+  // Project lifecycle flow + owner next-step guidance
+  "flow.draft": "Draft",
+  "flow.submitted": "Submitted",
+  "flow.review": "Under review",
+  "flow.decision": "Decision",
+  "flow.next": "What to do next",
+  "flow.stepDetails": "Complete the required details",
+  "flow.stepDocs": "Add supporting documents",
+  "flow.stepSubmit": "Pay & submit for review",
+  "flow.detailsHint": "Problem statement and goals are required.",
+  "flow.docsHint": "Optional but recommended — helps the review.",
+  "flow.submitHint": "A one-time review fee (or your subscription) applies.",
+  "flow.awaiting": "Submitted — awaiting a reviewer. You'll be notified of the decision.",
+  "flow.inReview": "Our team is reviewing your project.",
+  "flow.changes": "The reviewer requested changes. Update your project and resubmit.",
+  "flow.approved": "🎉 Approved. Congratulations!",
+  "flow.rejected": "This project was not approved. See the review notes below.",
+  "flow.backToQueue": "← Back to review queue",
+  "flow.edit": "Edit details",
 };
 
 const AR: Dict = {
@@ -406,6 +425,25 @@ const AR: Dict = {
   "checkout.secured": "تتم معالجة الدفع بأمان عبر البوابة. لا نرى بيانات بطاقتك ولا نخزّنها.",
   "checkout.vatIncluded": "الأسعار شاملة ضريبة القيمة المضافة 15%.",
   "checkout.starting": "جارٍ بدء الدفع الآمن…",
+  // Project lifecycle flow + owner next-step guidance
+  "flow.draft": "مسودة",
+  "flow.submitted": "تم الإرسال",
+  "flow.review": "قيد المراجعة",
+  "flow.decision": "القرار",
+  "flow.next": "الخطوة التالية",
+  "flow.stepDetails": "أكمل التفاصيل المطلوبة",
+  "flow.stepDocs": "أضف المستندات الداعمة",
+  "flow.stepSubmit": "ادفع وأرسل للمراجعة",
+  "flow.detailsHint": "بيان المشكلة والأهداف مطلوبان.",
+  "flow.docsHint": "اختياري لكن يُنصح به — يساعد في المراجعة.",
+  "flow.submitHint": "تُطبّق رسوم مراجعة لمرة واحدة (أو اشتراكك).",
+  "flow.awaiting": "تم الإرسال — بانتظار المراجع. سيتم إشعارك بالقرار.",
+  "flow.inReview": "فريقنا يراجع مشروعك الآن.",
+  "flow.changes": "طلب المراجع بعض التعديلات. حدّث مشروعك وأعد الإرسال.",
+  "flow.approved": "🎉 تمت الموافقة. تهانينا!",
+  "flow.rejected": "لم تتم الموافقة على هذا المشروع. اطّلع على ملاحظات المراجعة أدناه.",
+  "flow.backToQueue": "← العودة إلى قائمة المراجعة",
+  "flow.edit": "تعديل التفاصيل",
 };
 
 const DICTS: Record<Lang, Dict> = { ar: AR, en: EN };
