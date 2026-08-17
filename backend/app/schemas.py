@@ -111,6 +111,7 @@ class DocumentOut(ORMModel):
     content_type: str | None = None
     size_bytes: int | None = None
     extraction_status: str
+    scan_status: str = "skipped"
     created_at: datetime
 
 

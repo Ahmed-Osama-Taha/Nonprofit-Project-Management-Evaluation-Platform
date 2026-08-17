@@ -202,6 +202,9 @@ class Document(Base, TimestampMixin):
     storage_key: Mapped[str] = mapped_column(String(1024), nullable=False)
     extracted_text: Mapped[str | None] = mapped_column(Text)
     extraction_status: Mapped[str] = mapped_column(String(32), default="pending")
+    # AV scan result: "clean" | "skipped" (scanner disabled). Infected uploads
+    # are rejected before a row is ever created, so "infected" is never stored.
+    scan_status: Mapped[str] = mapped_column(String(32), default="skipped")
 
     project: Mapped[Project] = relationship(back_populates="documents")
 

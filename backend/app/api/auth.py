@@ -79,7 +79,9 @@ def _issue_session(
     """Create a new login session (device tracking) + tokens, and set cookies."""
     refresh_jti = uuid.uuid4().hex
     session = session_service.create_session(db, user, request, refresh_jti)
-    access = create_access_token(subject=user.id, role=user.role.value, sid=session.id)
+    access = create_access_token(
+        subject=user.id, role=user.role.value, sid=session.id, org=user.organization_id
+    )
     refresh = create_refresh_token(
         subject=user.id, role=user.role.value, sid=session.id, jti=refresh_jti
     )
@@ -193,7 +195,9 @@ def refresh(
             _clear_auth_cookies(response)
             raise HTTPException(status_code=401, detail="Session ended")
         new_jti = uuid.uuid4().hex
-        access = create_access_token(user.id, user.role.value, sid=session.id)
+        access = create_access_token(
+            user.id, user.role.value, sid=session.id, org=user.organization_id
+        )
         new_refresh = create_refresh_token(
             user.id, user.role.value, sid=session.id, jti=new_jti
         )

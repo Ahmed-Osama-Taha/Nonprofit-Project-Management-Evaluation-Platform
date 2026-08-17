@@ -35,8 +35,24 @@ class Settings(BaseSettings):
     # external calls are ever made).
     geoip_db_path: str = ""
 
-    # Redis — token denylist (revocation) + caching. Blank disables (no-op).
+    # Redis — token denylist (revocation) + caching + rate-limit counters.
+    # Blank disables (no-op).
     redis_url: str = ""                # e.g. redis://redis:6379/0
+
+    # Rate limiting (fixed window, Redis-backed). Active only when Redis is
+    # configured; otherwise every request is allowed (dev/test no-op).
+    rate_limit_enabled: bool = True
+    rate_limit_ip_max: int = 300           # requests per IP per window
+    rate_limit_ip_window: int = 60         # seconds
+    rate_limit_tenant_max: int = 600       # requests per organization per window
+    rate_limit_tenant_window: int = 60     # seconds
+
+    # Antivirus — ClamAV daemon (clamd) for uploaded-file scanning. Blank host
+    # disables scanning (dev/test no-op). When a host is set, uploads are scanned
+    # and the flow fails CLOSED (reject) if the scanner can't be reached.
+    clamav_host: str = ""              # e.g. "clamav"
+    clamav_port: int = 3310
+    clamav_timeout: int = 30           # seconds
 
     # Async broker — when set, AI analysis is enqueued to RabbitMQ and executed
     # by a dramatiq worker (out of the web process). Blank -> the API runs it

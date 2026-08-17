@@ -154,6 +154,75 @@ async def security_middleware(request: Request, call_next):
     return response
 
 
+_RL_SKIP_PREFIXES = ("/api/health", "/docs", "/redoc", "/openapi.json", "/favicon", "/metrics")
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Fixed-window rate limiting: per-IP (all clients) + per-tenant (per
+    organization). Backed by Redis — a no-op when Redis is not configured, so
+    dev/test are unaffected. Returns 429 with a Retry-After header when over
+    limit."""
+    if (
+        not settings.rate_limit_enabled
+        or request.method == "OPTIONS"
+        or not request.url.path.startswith("/api/")
+        or any(request.url.path.startswith(p) for p in _RL_SKIP_PREFIXES)
+    ):
+        return await call_next(request)
+
+    from app.core.redis import rate_incr
+
+    # Per-IP limit (honours a forwarding proxy / ngrok).
+    ip = _client_ip(request)
+    if ip:
+        window = settings.rate_limit_ip_window
+        bucket = int(time.time()) // window
+        count = rate_incr(f"rl:ip:{ip}:{bucket}", window)
+        if count is not None and count > settings.rate_limit_ip_max:
+            return _too_many(window)
+
+    # Per-tenant limit (organization id from the access token's `org` claim).
+    org = _token_org(request)
+    if org:
+        window = settings.rate_limit_tenant_window
+        bucket = int(time.time()) // window
+        count = rate_incr(f"rl:org:{org}:{bucket}", window)
+        if count is not None and count > settings.rate_limit_tenant_max:
+            return _too_many(window)
+
+    return await call_next(request)
+
+
+def _too_many(retry_after: int) -> JSONResponse:
+    resp = JSONResponse(
+        status_code=429, content={"detail": "Rate limit exceeded. Slow down."}
+    )
+    resp.headers["Retry-After"] = str(retry_after)
+    return resp
+
+
+def _client_ip(request: Request) -> str | None:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        first = fwd.split(",")[0].strip()
+        if first:
+            return first
+    real = request.headers.get("x-real-ip")
+    if real:
+        return real.strip()
+    return request.client.host if request.client else None
+
+
+def _token_org(request: Request) -> str | None:
+    raw = request.cookies.get(settings.access_cookie_name)
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        raw = auth[7:]
+    payload = decode_access_token(raw or "")
+    return payload.get("org") if payload else None
+
+
 def _resolve_actor(request: Request) -> User | None:
     auth_header = request.headers.get("authorization", "")
     if not auth_header.lower().startswith("bearer "):

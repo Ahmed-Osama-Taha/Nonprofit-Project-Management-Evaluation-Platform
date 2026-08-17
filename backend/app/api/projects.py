@@ -39,6 +39,7 @@ from app.schemas import (
     ProjectUpdate,
 )
 from app.services import analysis as analysis_service
+from app.services import antivirus
 from app.services import storage
 from app.services.ai import AINotConfigured
 from app.services.audit import notify, record_audit
@@ -227,6 +228,31 @@ async def upload_document(
     # executable rejection + text safety. The client Content-Type is ignored.
     safe_name, content_type, ext = validate_upload(file.filename or "", data)
 
+    # Antivirus scan (fail closed): reject infected files, and — when AV is
+    # enabled but the scanner is unreachable — refuse the upload rather than
+    # store something unscanned. No-op (scan_status="skipped") when disabled.
+    scan_status = "skipped"
+    if antivirus.av_enabled():
+        try:
+            clean, signature = antivirus.scan_bytes(data)
+        except antivirus.AVUnavailable:
+            raise HTTPException(
+                status_code=503,
+                detail="File could not be virus-scanned; please try again shortly.",
+            )
+        if not clean:
+            record_audit(
+                db, actor=user, action="document.malware_blocked",
+                entity_type="project", entity_id=project_id,
+                detail={"filename": safe_name, "signature": signature},
+            )
+            db.commit()
+            raise HTTPException(
+                status_code=422,
+                detail=f"File rejected: malware detected ({signature}).",
+            )
+        scan_status = "clean"
+
     storage.ensure_bucket()
     # The object key never contains user-controlled text (uuid + validated ext).
     key = f"projects/{project_id}/{uuid.uuid4()}{ext}"
@@ -247,6 +273,7 @@ async def upload_document(
         storage_key=key,
         extracted_text=text or None,
         extraction_status=extraction_status if text else "empty",
+        scan_status=scan_status,
     )
     db.add(doc)
     record_audit(

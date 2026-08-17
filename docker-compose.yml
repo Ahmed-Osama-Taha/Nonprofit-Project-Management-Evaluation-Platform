@@ -45,6 +45,22 @@ services:
       timeout: 5s
       retries: 10
 
+  # Antivirus daemon (clamd). Scans every uploaded document over INSTREAM.
+  # First boot downloads virus definitions via freshclam (can take a couple of
+  # minutes); uploads fail closed (503) until it's ready, then self-heal.
+  clamav:
+    image: clamav/clamav:latest
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --ping 1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
   # Message broker for async AI analysis (dramatiq). Management UI on :15672.
   rabbitmq:
     image: rabbitmq:3-management
@@ -71,11 +87,19 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_started
+      clamav:
+        condition: service_started
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://nppm:nppm@db:5432/nppm}
       SECRET_KEY: ${SECRET_KEY:-dev-super-secret-change-me}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      # Antivirus — clamd host for upload scanning (fail-closed when set).
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      # Rate limiting (Redis-backed; no-op without Redis).
+      RATE_LIMIT_IP_MAX: ${RATE_LIMIT_IP_MAX:-300}
+      RATE_LIMIT_TENANT_MAX: ${RATE_LIMIT_TENANT_MAX:-600}
       # Auth cookies — httpOnly session token (XSS-safe). Set COOKIE_SECURE=true
       # behind HTTPS in production.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
@@ -186,3 +210,4 @@ volumes:
   postgres-data:
   minio-data:
   redis-data:
+  clamav-data:

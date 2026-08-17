@@ -24,6 +24,7 @@ def _encode(
     minutes: int,
     sid: str | None = None,
     jti: str | None = None,
+    org: str | None = None,
 ) -> str:
     now = datetime.now(timezone.utc)
     payload = {
@@ -36,12 +37,16 @@ def _encode(
     }
     if sid:
         payload["sid"] = sid              # login-session id (device tracking)
+    if org:
+        payload["org"] = org              # tenant id (per-tenant rate limiting)
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 
-def create_access_token(subject: str, role: str, sid: str | None = None) -> str:
+def create_access_token(
+    subject: str, role: str, sid: str | None = None, org: str | None = None
+) -> str:
     return _encode(
-        subject, role, "access", settings.access_token_expire_minutes, sid=sid
+        subject, role, "access", settings.access_token_expire_minutes, sid=sid, org=org
     )
 
 
