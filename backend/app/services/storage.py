@@ -45,6 +45,14 @@ def upload_bytes(key: str, data: bytes, content_type: str | None = None) -> None
     )
 
 
+def delete_object(key: str) -> None:
+    """Best-effort delete of a stored object (DB row is the source of truth)."""
+    try:
+        _s3().delete_object(Bucket=settings.s3_bucket, Key=key)
+    except Exception:  # noqa: BLE001 — never block a document delete on storage
+        pass
+
+
 def download_bytes(key: str) -> bytes:
     s3 = _s3()
     buf = io.BytesIO()

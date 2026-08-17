@@ -136,6 +136,8 @@ export const api = {
   },
   downloadDocument: (id: string, docId: string) =>
     request<{ url: string }>(`/api/projects/${id}/documents/${docId}/download`),
+  deleteDocument: (id: string, docId: string) =>
+    request<void>(`/api/projects/${id}/documents/${docId}`, { method: "DELETE" }),
   chat: (id: string, question: string, language = "ar") =>
     request<{ answer: string; sources: string[] }>(`/api/projects/${id}/chat`, {
       body: { question, language },

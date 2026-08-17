@@ -277,6 +277,28 @@ def download_document(
     }
 
 
+@router.delete("/{project_id}/documents/{document_id}", status_code=204)
+def delete_document(
+    project_id: str,
+    document_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    """Remove a document — only the owning org, and only while editable."""
+    project = _load_project(db, project_id)
+    _authorize_edit(project, user)
+    doc = db.get(Document, document_id)
+    if not doc or doc.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Document not found")
+    storage.delete_object(doc.storage_key)
+    db.delete(doc)
+    record_audit(
+        db, actor=user, action="document.delete", entity_type="document",
+        entity_id=document_id, detail={"project_id": project_id, "filename": doc.filename},
+    )
+    db.commit()
+
+
 # ── Workflow: submit ─────────────────────────────────────────
 @router.post("/{project_id}/submit", response_model=ProjectDetailOut)
 def submit_project(
