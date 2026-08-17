@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  AdminSession,
   AIAnalysis,
   AuditEntry,
   DashboardStats,
@@ -193,8 +194,18 @@ export const api = {
   stats: () => request<DashboardStats>("/api/admin/stats"),
   users: () => request<User[]>("/api/admin/users"),
   organizations: () => request("/api/admin/organizations"),
-  audit: (limit = 100) =>
-    request<AuditEntry[]>(`/api/admin/audit?limit=${limit}`),
+  audit: (limit = 100, eventsOnly = false) =>
+    request<AuditEntry[]>(
+      `/api/admin/audit?limit=${limit}&events_only=${eventsOnly}`
+    ),
+  clearAudit: (apiLogsOnly = true) =>
+    request<void>(`/api/admin/audit?api_logs_only=${apiLogsOnly}`, {
+      method: "DELETE",
+    }),
+  adminSessions: (limit = 200) =>
+    request<AdminSession[]>(`/api/admin/sessions?limit=${limit}`),
+  deleteAdminSession: (id: string) =>
+    request<void>(`/api/admin/sessions/${id}`, { method: "DELETE" }),
   createReviewer: (payload: {
     email: string;
     password: string;

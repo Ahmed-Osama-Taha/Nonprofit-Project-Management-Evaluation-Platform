@@ -72,11 +72,22 @@ export interface Pricing {
 export interface SessionInfo {
   id: string;
   device?: string | null;
-  ip?: string | null;
   location?: string | null;
   created_at: string;
   last_seen_at: string;
   current: boolean;
+}
+
+export interface AdminSession {
+  id: string;
+  user_email?: string | null;
+  user_name?: string | null;
+  device?: string | null;
+  ip?: string | null;
+  location?: string | null;
+  created_at: string;
+  last_seen_at: string;
+  revoked: boolean;
 }
 
 export interface DocumentFile {

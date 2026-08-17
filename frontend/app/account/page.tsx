@@ -141,10 +141,7 @@ function AccountInner() {
                         </span>
                       )}
                     </td>
-                    <td>
-                      {s.location || "—"}
-                      {s.ip && <div className="small muted">{s.ip}</div>}
-                    </td>
+                    <td>{s.location || "—"}</td>
                     <td className="small">{dateTime(s.created_at)}</td>
                     <td className="small">{dateTime(s.last_seen_at)}</td>
                     <td style={{ textAlign: "end" }}>

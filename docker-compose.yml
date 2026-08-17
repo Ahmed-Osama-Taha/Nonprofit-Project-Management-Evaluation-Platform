@@ -97,6 +97,14 @@ services:
       # Antivirus — clamd host for upload scanning (fail-closed when set).
       CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
       CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      # Login-session privacy. Default false = raw IPs are NOT stored (coarse
+      # location still is), so a shared demo can't leak one user's IP to another.
+      # Set true on a private deployment for security forensics.
+      SESSION_STORE_IP: ${SESSION_STORE_IP:-false}
+      # Geolocation: mount a MaxMind GeoLite2 DB (offline) or enable the HTTPS
+      # API fallback (needs egress). Both off -> location shows "Local"/blank.
+      GEOIP_DB_PATH: ${GEOIP_DB_PATH:-}
+      GEOIP_API_ENABLED: ${GEOIP_API_ENABLED:-false}
       # Rate limiting (Redis-backed; no-op without Redis).
       RATE_LIMIT_IP_MAX: ${RATE_LIMIT_IP_MAX:-300}
       RATE_LIMIT_TENANT_MAX: ${RATE_LIMIT_TENANT_MAX:-600}

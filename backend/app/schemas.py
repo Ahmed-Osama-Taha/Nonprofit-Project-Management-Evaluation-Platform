@@ -110,11 +110,24 @@ class MockCompleteRequest(BaseModel):
 class SessionOut(ORMModel):
     id: str
     device: str | None = None
-    ip: str | None = None
     location: str | None = None
     created_at: datetime
     last_seen_at: datetime
     current: bool = False
+
+
+class AdminSessionOut(BaseModel):
+    """Admin login-activity row — includes who and (admin-only) the IP."""
+
+    id: str
+    user_email: str | None = None
+    user_name: str | None = None
+    device: str | None = None
+    ip: str | None = None
+    location: str | None = None
+    created_at: datetime
+    last_seen_at: datetime
+    revoked: bool = False
 
 
 # ── Projects ─────────────────────────────────────────────────

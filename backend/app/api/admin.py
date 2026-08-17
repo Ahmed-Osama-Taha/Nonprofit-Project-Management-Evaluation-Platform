@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_roles
@@ -14,8 +14,10 @@ from app.models import (
     ProjectStatus,
     User,
     UserRole,
+    UserSession,
 )
 from app.schemas import (
+    AdminSessionOut,
     AuditLogOut,
     DashboardStats,
     OrganizationOut,
@@ -84,10 +86,88 @@ def create_reviewer(
     return user
 
 
+# ── Login activity (all users' sessions) ─────────────────────
+@router.get("/sessions", response_model=list[AdminSessionOut])
+def list_login_activity(
+    db: Session = Depends(get_db),
+    _: User = AdminOnly,
+    limit: int = Query(default=200, le=1000),
+    active_only: bool = Query(default=False),
+) -> list[AdminSessionOut]:
+    """Every login across all users — the admin login-activity log."""
+    stmt = (
+        select(UserSession)
+        .options(selectinload(UserSession.user))
+        .order_by(UserSession.last_seen_at.desc())
+        .limit(limit)
+    )
+    if active_only:
+        stmt = stmt.where(UserSession.revoked_at.is_(None))
+    out: list[AdminSessionOut] = []
+    for s in db.scalars(stmt).all():
+        out.append(
+            AdminSessionOut(
+                id=s.id,
+                user_email=s.user.email if s.user else None,
+                user_name=s.user.full_name if s.user else None,
+                device=s.device,
+                ip=s.ip,
+                location=s.location,
+                created_at=s.created_at,
+                last_seen_at=s.last_seen_at,
+                revoked=s.revoked_at is not None,
+            )
+        )
+    return out
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+def delete_login_record(
+    session_id: str, db: Session = Depends(get_db), admin: User = AdminOnly
+) -> Response:
+    """Permanently delete one login record (e.g. to purge a bystander's IP on a
+    shared demo)."""
+    session = db.get(UserSession, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    db.delete(session)
+    record_audit(db, actor=admin, action="admin.session.delete",
+                 entity_type="session", entity_id=session_id)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/audit", response_model=list[AuditLogOut])
 def list_audit(
-    db: Session = Depends(get_db), _: User = AdminOnly, limit: int = 200
+    db: Session = Depends(get_db),
+    _: User = AdminOnly,
+    limit: int = 200,
+    events_only: bool = Query(
+        default=False, description="Only human domain events, not raw API access rows"
+    ),
 ) -> list[AuditLog]:
-    return list(
-        db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)).all()
-    )
+    stmt = select(AuditLog).order_by(AuditLog.created_at.desc())
+    if events_only:
+        # Domain events have no HTTP method; API access rows do.
+        stmt = stmt.where(AuditLog.method.is_(None))
+    return list(db.scalars(stmt.limit(limit)).all())
+
+
+@router.delete("/audit", status_code=204)
+def clear_audit(
+    db: Session = Depends(get_db),
+    admin: User = AdminOnly,
+    api_logs_only: bool = Query(
+        default=True, description="Clear only raw API access rows, keep domain events"
+    ),
+) -> Response:
+    """Clear audit rows. Defaults to purging just the noisy API access log (and
+    the IPs it holds), keeping the human domain-event trail."""
+    stmt = delete(AuditLog)
+    if api_logs_only:
+        stmt = stmt.where(AuditLog.method.is_not(None))
+    db.execute(stmt)
+    record_audit(db, actor=admin, action="admin.audit.clear",
+                 entity_type="audit", detail={"api_logs_only": api_logs_only})
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
