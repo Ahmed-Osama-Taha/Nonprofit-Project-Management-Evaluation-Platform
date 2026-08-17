@@ -226,6 +226,10 @@ class Document(Base, TimestampMixin):
     # AV scan result: "clean" | "skipped" (scanner disabled). Infected uploads
     # are rejected before a row is ever created, so "infected" is never stored.
     scan_status: Mapped[str] = mapped_column(String(32), default="skipped")
+    # Soft delete: removing a document hides it from the org and from AI
+    # analysis but NEVER destroys the stored object — the record is retained for
+    # audit / legal defensibility. Only an admin purge may hard-delete.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     project: Mapped[Project] = relationship(back_populates="documents")
 

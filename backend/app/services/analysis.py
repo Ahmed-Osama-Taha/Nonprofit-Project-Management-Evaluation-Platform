@@ -52,8 +52,12 @@ def index_project_documents(db: Session, project: Project) -> int:
     """(Re)build the pgvector index for a project's documents. Returns chunk count."""
     db.execute(delete(DocumentChunk).where(DocumentChunk.project_id == project.id))
 
+    # Exclude soft-deleted documents — a removed document must not influence
+    # the AI analysis, even though its object is retained for audit.
     docs = db.scalars(
-        select(Document).where(Document.project_id == project.id)
+        select(Document).where(
+            Document.project_id == project.id, Document.deleted_at.is_(None)
+        )
     ).all()
 
     all_chunks: list[tuple[str, int, str]] = []  # (document_id, index, content)
