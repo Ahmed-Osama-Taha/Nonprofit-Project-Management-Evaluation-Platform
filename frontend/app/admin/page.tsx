@@ -1,6 +1,32 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Empty,
+  Form,
+  Input,
+  Popconfirm,
+  Progress,
+  Row,
+  Segmented,
+  Space,
+  Spin,
+  Statistic,
+  Table,
+  Tag,
+  Typography,
+} from "antd";
+import type { ColumnsType } from "antd/es/table";
+import {
+  DeleteOutlined,
+  RobotOutlined,
+  SafetyOutlined,
+  UserAddOutlined,
+} from "@ant-design/icons";
 import { api } from "@/lib/api";
 import { useI18n, statusLabel } from "@/lib/i18n";
 import type {
@@ -11,16 +37,39 @@ import type {
   User,
   VisitorSummary,
 } from "@/lib/types";
-import { RequireAuth, PageHead, BarList, Donut, dateStr } from "@/components/ui";
+import { RequireAuth, dateStr } from "@/components/ui";
 import { VisitorProfile } from "@/components/admin/VisitorProfile";
 
-type AdminTab =
-  | "overview"
-  | "users"
-  | "logins"
-  | "visitors"
-  | "analytics"
-  | "audit";
+const { Title, Text, Paragraph } = Typography;
+
+type AdminTab = "overview" | "users" | "logins" | "visitors" | "analytics" | "audit";
+
+const STATUS_TAG: Record<string, string> = {
+  draft: "default",
+  submitted: "blue",
+  under_review: "gold",
+  changes_requested: "orange",
+  approved: "green",
+  rejected: "red",
+};
+
+/** Labelled Progress-bar row for a distribution. */
+function DistList({ data, stroke }: { data: { label: string; value: number; sub?: string }[]; stroke?: string }) {
+  const max = Math.max(1, ...data.map((d) => d.value));
+  return (
+    <>
+      {data.map((d) => (
+        <div key={d.label} style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+            <Text>{d.label}</Text>
+            <Text type="secondary">{d.sub ?? d.value}</Text>
+          </div>
+          <Progress percent={Math.round((d.value / max) * 100)} strokeColor={stroke} showInfo={false} />
+        </div>
+      ))}
+    </>
+  );
+}
 
 function AdminInner() {
   const { t, lang } = useI18n();
@@ -35,7 +84,7 @@ function AdminInner() {
   const [showApiLog, setShowApiLog] = useState(false);
   const [profile, setProfile] = useState<{ visitorId?: string; userId?: string } | null>(null);
   const [tab, setTab] = useState<AdminTab>("overview");
-  const [form, setForm] = useState({ full_name: "", email: "", password: "" });
+  const [form] = Form.useForm();
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
@@ -47,6 +96,8 @@ function AdminInner() {
     api.visitors().then(setVisitors).catch(() => {});
     api.analytics().then(setAnalytics).catch(() => {});
   }
+
+  useEffect(loadAll, [showApiLog]);
 
   async function generateInsights() {
     setAiBusy(true);
@@ -61,527 +112,443 @@ function AdminInner() {
     }
   }
 
-  useEffect(loadAll, [showApiLog]);
-
   async function deleteSession(id: string) {
-    if (!window.confirm(t("admin.deleteConfirm"))) return;
     await api.deleteAdminSession(id);
     setSessions((s) => s.filter((x) => x.id !== id));
   }
 
   async function clearApiLog() {
-    if (!window.confirm(t("admin.clearConfirm"))) return;
     await api.clearAudit(true);
     loadAll();
   }
 
-  async function createReviewer(e: React.FormEvent) {
-    e.preventDefault();
+  async function createReviewer(vals: { full_name: string; email: string; password: string }) {
     setMsg("");
     setErr("");
     try {
-      await api.createReviewer(form);
-      setMsg(`✓ ${form.email}`);
-      setForm({ full_name: "", email: "", password: "" });
+      await api.createReviewer(vals);
+      setMsg(`✓ ${vals.email}`);
+      form.resetFields();
       loadAll();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
     }
   }
 
-  const tabs: { key: AdminTab; label: string }[] = [
-    { key: "overview", label: t("nav.dashboard") },
-    { key: "users", label: t("admin.users") },
-    { key: "logins", label: t("admin.logins") },
-    { key: "visitors", label: t("admin.visitors") },
-    { key: "analytics", label: t("an.title") },
-    { key: "audit", label: t("admin.audit") },
+  const tabOptions = [
+    { value: "overview", label: t("nav.dashboard") },
+    { value: "users", label: t("admin.users") },
+    { value: "logins", label: t("admin.logins") },
+    { value: "visitors", label: t("admin.visitors") },
+    { value: "analytics", label: t("an.title") },
+    { value: "audit", label: t("admin.audit") },
+  ];
+
+  // ── Column definitions ────────────────────────────────
+  const userCols: ColumnsType<User> = [
+    { title: t("auth.fullName"), dataIndex: "full_name" },
+    { title: t("auth.email"), dataIndex: "email", responsive: ["sm"] },
+    { title: t("review.decision"), dataIndex: "role", render: (r: string) => <Tag>{t(`role.${r}`)}</Tag> },
+    { title: t("role.organization"), dataIndex: ["organization", "name"], render: (v: string) => v || t("common.none") },
+  ];
+
+  const loginCols: ColumnsType<AdminSession> = [
+    {
+      title: t("admin.user"),
+      dataIndex: "user_name",
+      render: (v: string, r) => (
+        <div>
+          <div>{v || "—"}</div>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {r.user_email}
+          </Text>
+        </div>
+      ),
+    },
+    { title: t("admin.device"), dataIndex: "device", responsive: ["md"], render: (v: string) => v || "—" },
+    { title: t("admin.location"), dataIndex: "location", responsive: ["sm"], render: (v: string) => v || "—" },
+    { title: t("admin.ip"), dataIndex: "ip", responsive: ["lg"], render: (v: string) => <Text type="secondary">{v || "—"}</Text> },
+    { title: t("admin.when"), dataIndex: "last_seen_at", responsive: ["md"], render: dateStr },
+    {
+      title: t("admin.status"),
+      dataIndex: "revoked",
+      render: (rev: boolean) => <Tag color={rev ? "default" : "green"}>{rev ? t("admin.revoked") : t("admin.active")}</Tag>,
+    },
+    {
+      title: "",
+      key: "act",
+      align: "end",
+      render: (_: unknown, r) => (
+        <Popconfirm title={t("admin.deleteConfirm")} onConfirm={() => deleteSession(r.id)}>
+          <Button danger size="small" icon={<DeleteOutlined />} onClick={(e) => e.stopPropagation()} />
+        </Popconfirm>
+      ),
+    },
+  ];
+
+  const visitorCols: ColumnsType<VisitorSummary> = [
+    {
+      title: t("admin.fingerprint"),
+      dataIndex: "fingerprint_hash",
+      render: (_: string, v) => (
+        <Text type="secondary" style={{ fontFamily: "monospace" }}>
+          {(v.fingerprint_hash || v.visitor_key).slice(0, 12)}…
+        </Text>
+      ),
+    },
+    { title: t("admin.user"), dataIndex: "user_email", responsive: ["sm"], render: (v: string) => v || "—" },
+    {
+      title: t("admin.device"),
+      dataIndex: "device",
+      render: (_: string, v) => (
+        <div>
+          <Space size={4}>
+            {v.device || v.platform || "—"}
+            {v.is_bot && <Tag color="red">bot</Tag>}
+          </Space>
+          {v.timezone && (
+            <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {v.timezone}
+              </Text>
+            </div>
+          )}
+        </div>
+      ),
+    },
+    { title: t("admin.location"), dataIndex: "location", responsive: ["md"], render: (v: string) => v || "—" },
+    { title: t("admin.evtCount"), dataIndex: "event_count", responsive: ["lg"] },
+    { title: t("admin.seen"), dataIndex: "last_seen", responsive: ["md"], render: dateStr },
+    {
+      title: "",
+      key: "act",
+      align: "end",
+      render: (_: unknown, v) => (
+        <Popconfirm
+          title={t("admin.deleteConfirm")}
+          onConfirm={async () => {
+            await api.deleteVisitor(v.id);
+            setVisitors((s) => s.filter((x) => x.id !== v.id));
+          }}
+        >
+          <Button danger size="small" icon={<DeleteOutlined />} onClick={(e) => e.stopPropagation()} />
+        </Popconfirm>
+      ),
+    },
+  ];
+
+  const apiLogCols: ColumnsType<AuditEntry> = [
+    { title: t("admin.when"), dataIndex: "created_at", render: dateStr },
+    { title: t("admin.actor"), dataIndex: "actor_email", render: (v: string) => v || "system" },
+    { title: t("admin.method"), dataIndex: "method", responsive: ["sm"], render: (v: string) => v || "—" },
+    { title: t("admin.path"), dataIndex: "path", responsive: ["md"], render: (v: string) => <Text type="secondary">{v || "—"}</Text> },
+    {
+      title: t("admin.statusCode"),
+      dataIndex: "status_code",
+      render: (c: number) => (c ? <Tag color={c >= 400 ? "red" : "green"}>{c}</Tag> : "—"),
+    },
+    { title: t("admin.latency"), dataIndex: "latency_ms", responsive: ["lg"], render: (v: number) => (v != null ? `${v}ms` : "—") },
+  ];
+
+  const eventCols: ColumnsType<AuditEntry> = [
+    { title: t("admin.when"), dataIndex: "created_at", render: dateStr, width: 160 },
+    {
+      title: t("admin.actor"),
+      dataIndex: "actor_email",
+      render: (v: string, a) => (
+        <Space size={4}>
+          {v || "system"}
+          {a.actor_role && <Tag>{t(`role.${a.actor_role}`)}</Tag>}
+        </Space>
+      ),
+    },
+    { title: t("admin.summary"), key: "sum", render: (_: unknown, a) => eventSummary(a) },
+  ];
+
+  const alertCols: ColumnsType<Analytics["security_alerts"][number]> = [
+    { title: t("admin.when"), dataIndex: "when", render: dateStr },
+    { title: t("admin.user"), dataIndex: "user", render: (v: string) => v || "—" },
+    { title: t("admin.location"), dataIndex: "location", render: (v: string) => v || "—" },
+    { title: t("admin.newDevice"), key: "nd", render: () => <Tag color="orange">{t("admin.newDevice")}</Tag> },
   ];
 
   return (
     <>
-      <PageHead title={t("admin.title")} sub={t("app.tagline")} />
+      <div style={{ marginBottom: 16 }}>
+        <Title level={3} style={{ margin: 0 }}>
+          {t("admin.title")}
+        </Title>
+        <Text type="secondary">{t("app.tagline")}</Text>
+      </div>
 
-      <div className="chip-row" style={{ marginBottom: 16 }}>
-        {tabs.map((tb) => (
-          <button
-            key={tb.key}
-            className={`btn btn-sm ${tab === tb.key ? "" : "btn-secondary"}`}
-            onClick={() => setTab(tb.key)}
-          >
-            {tb.label}
-          </button>
-        ))}
+      <div style={{ overflowX: "auto", marginBottom: 16 }}>
+        <Segmented value={tab} onChange={(v) => setTab(v as AdminTab)} options={tabOptions} />
       </div>
 
       {tab === "overview" && stats && (
         <>
-          <div className="grid-stats" style={{ marginBottom: 16 }}>
-            <div className="stat">
-              <div className="num">{stats.total_projects}</div>
-              <div className="lbl">{t("rev.totalProjects")}</div>
-            </div>
-            <div className="stat">
-              <div className="num">{stats.pending_review}</div>
-              <div className="lbl">{t("rev.pending")}</div>
-            </div>
-            <div className="stat">
-              <div className="num">{stats.total_organizations}</div>
-              <div className="lbl">{t("admin.orgs")}</div>
-            </div>
-            <div className="stat">
-              <div className="num">{stats.total_users}</div>
-              <div className="lbl">{t("admin.users")}</div>
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-title">
-              <h3>{t("rev.byStatus")}</h3>
-            </div>
-            <table>
-              <tbody>
-                {Object.entries(stats.by_status).map(([k, v]) => (
-                  <tr key={k}>
-                    <td>{statusLabel(t, k)}</td>
-                    <td style={{ textAlign: "end", fontWeight: 700 }}>{v}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic title={t("rev.totalProjects")} value={stats.total_projects} />
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic title={t("rev.pending")} value={stats.pending_review} valueStyle={{ color: "#d97706" }} />
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic title={t("admin.orgs")} value={stats.total_organizations} />
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic title={t("admin.users")} value={stats.total_users} />
+              </Card>
+            </Col>
+          </Row>
+          <Card title={t("rev.byStatus")}>
+            <DistList data={Object.entries(stats.by_status).map(([k, v]) => ({ label: statusLabel(t, k), value: v }))} />
+          </Card>
         </>
       )}
 
       {tab === "users" && (
         <>
-          <div className="card">
-            <div className="card-title">
-              <h3>{t("admin.createReviewer")}</h3>
-            </div>
-            {msg && <div className="success-box">{msg}</div>}
-            {err && <div className="error">{err}</div>}
-            <form onSubmit={createReviewer}>
-              <div className="row">
-                <div className="field">
-                  <label>{t("auth.fullName")}</label>
-                  <input
-                    value={form.full_name}
-                    onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="field">
-                  <label>{t("auth.email")}</label>
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-              <div className="field">
-                <label>{t("auth.password")}</label>
-                <input
-                  type="password"
-                  minLength={8}
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  required
-                />
-              </div>
-              <button className="btn">{t("admin.createReviewer")}</button>
-            </form>
-          </div>
+          <Card title={t("admin.createReviewer")} style={{ marginBottom: 16 }}>
+            {msg && <Alert type="success" message={msg} showIcon style={{ marginBottom: 12 }} />}
+            {err && <Alert type="error" message={err} showIcon style={{ marginBottom: 12 }} />}
+            <Form form={form} layout="vertical" onFinish={createReviewer}>
+              <Row gutter={12}>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="full_name" label={t("auth.fullName")} rules={[{ required: true }]}>
+                    <Input />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="email" label={t("auth.email")} rules={[{ required: true, type: "email" }]}>
+                    <Input type="email" />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item name="password" label={t("auth.password")} rules={[{ required: true, min: 8 }]}>
+                <Input.Password />
+              </Form.Item>
+              <Button type="primary" htmlType="submit" icon={<UserAddOutlined />}>
+                {t("admin.createReviewer")}
+              </Button>
+            </Form>
+          </Card>
 
-          <div className="card">
-            <div className="card-title">
-              <h3>{t("admin.users")}</h3>
-            </div>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t("auth.fullName")}</th>
-                    <th>{t("auth.email")}</th>
-                    <th>{t("review.decision")}</th>
-                    <th>{t("role.organization")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id}>
-                      <td>{u.full_name}</td>
-                      <td>{u.email}</td>
-                      <td>
-                        <span className="pill">{t(`role.${u.role}`)}</span>
-                      </td>
-                      <td>{u.organization?.name || t("common.none")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <Card title={t("admin.users")} styles={{ body: { padding: 0 } }}>
+            <Table rowKey="id" columns={userCols} dataSource={users} pagination={{ pageSize: 10, hideOnSinglePage: true }} />
+          </Card>
         </>
       )}
 
       {tab === "logins" && (
-        <div className="card">
-          <div className="card-title">
-            <div>
-              <h3 style={{ margin: 0 }}>{t("admin.logins")}</h3>
-              <span className="section-hint">{t("admin.loginsHint")}</span>
-            </div>
+        <Card title={t("admin.logins")} styles={{ body: { padding: 0 } }}>
+          <div style={{ padding: "0 16px", paddingTop: 12 }}>
+            <Text type="secondary">{t("admin.loginsHint")}</Text>
           </div>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("admin.user")}</th>
-                  <th>{t("admin.device")}</th>
-                  <th>{t("admin.location")}</th>
-                  <th>{t("admin.ip")}</th>
-                  <th>{t("admin.when")}</th>
-                  <th>{t("admin.status")}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((s) => (
-                  <tr
-                    key={s.id}
-                    className={s.user_id ? "clickable" : ""}
-                    onClick={() => s.user_id && setProfile({ userId: s.user_id })}
-                  >
-                    <td className="small">
-                      {s.user_name || "—"}
-                      <div className="muted">{s.user_email}</div>
-                    </td>
-                    <td className="small">{s.device || "—"}</td>
-                    <td className="small">{s.location || "—"}</td>
-                    <td className="small muted">{s.ip || "—"}</td>
-                    <td className="small muted">{dateStr(s.last_seen_at)}</td>
-                    <td>
-                      <span className={`badge ${s.revoked ? "" : "badge-approved"}`}>
-                        {s.revoked ? t("admin.revoked") : t("admin.active")}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: "end" }}>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteSession(s.id);
-                        }}
-                      >
-                        {t("admin.delete")}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+          <Table
+            rowKey="id"
+            columns={loginCols}
+            dataSource={sessions}
+            onRow={(r) => ({
+              onClick: () => r.user_id && setProfile({ userId: r.user_id }),
+              style: { cursor: r.user_id ? "pointer" : "default" },
+            })}
+            pagination={{ pageSize: 15, hideOnSinglePage: true }}
+          />
+        </Card>
       )}
 
       {tab === "visitors" && (
-        <div className="card">
-          <div className="card-title">
-            <div>
-              <h3 style={{ margin: 0 }}>{t("admin.visitors")}</h3>
-              <span className="section-hint">{t("admin.visitorsHint")}</span>
-            </div>
+        <Card title={t("admin.visitors")} styles={{ body: { padding: 0 } }}>
+          <div style={{ padding: "0 16px", paddingTop: 12 }}>
+            <Text type="secondary">{t("admin.visitorsHint")}</Text>
           </div>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("admin.fingerprint")}</th>
-                  <th>{t("admin.user")}</th>
-                  <th>{t("admin.device")}</th>
-                  <th>{t("admin.location")}</th>
-                  <th>{t("admin.evtCount")}</th>
-                  <th>{t("admin.seen")}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {visitors.map((v) => (
-                  <tr
-                    key={v.id}
-                    className="clickable"
-                    onClick={() => setProfile({ visitorId: v.id })}
-                  >
-                    <td className="small muted" style={{ fontFamily: "monospace" }}>
-                      {(v.fingerprint_hash || v.visitor_key).slice(0, 12)}…
-                    </td>
-                    <td className="small">{v.user_email || <span className="muted">—</span>}</td>
-                    <td className="small">
-                      {v.device || v.platform || "—"}
-                      {v.is_bot && (
-                        <span className="badge badge-rejected" style={{ marginInlineStart: 6 }}>
-                          bot
-                        </span>
-                      )}
-                      <div className="muted">{v.timezone || ""}</div>
-                    </td>
-                    <td className="small">{v.location || "—"}</td>
-                    <td className="small">{v.event_count}</td>
-                    <td className="small muted">{dateStr(v.last_seen)}</td>
-                    <td style={{ textAlign: "end" }}>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          if (!window.confirm(t("admin.deleteConfirm"))) return;
-                          await api.deleteVisitor(v.id);
-                          setVisitors((s) => s.filter((x) => x.id !== v.id));
-                        }}
-                      >
-                        {t("admin.delete")}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+          <Table
+            rowKey="id"
+            columns={visitorCols}
+            dataSource={visitors}
+            onRow={(v) => ({ onClick: () => setProfile({ visitorId: v.id }), style: { cursor: "pointer" } })}
+            pagination={{ pageSize: 15, hideOnSinglePage: true }}
+          />
+        </Card>
       )}
 
       {tab === "analytics" && analytics && (
         <>
-          <div className="grid-stats" style={{ marginBottom: 16 }}>
-            <div className="stat">
-              <div className="num">{analytics.total_visitors}</div>
-              <div className="lbl">{t("an.visitors")}</div>
-              <div className="sub">
-                {analytics.identified} {t("an.identified")} · {analytics.anonymous}{" "}
-                {t("an.anonymous")}
-              </div>
-            </div>
-            <div className="stat">
-              <div className="num">{analytics.pageviews}</div>
-              <div className="lbl">{t("an.pageviews")}</div>
-              <div className="sub">
-                {analytics.events} {t("an.events")}
-              </div>
-            </div>
-            <div className="stat">
-              <div className="num">{analytics.new_devices}</div>
-              <div className="lbl">{t("an.newDevices")}</div>
-            </div>
-            <div className="stat">
-              <div className="num">{analytics.bots}</div>
-              <div className="lbl">{t("an.bots")}</div>
-            </div>
-          </div>
+          <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic title={t("an.visitors")} value={analytics.total_visitors} />
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {analytics.identified} {t("an.identified")} · {analytics.anonymous} {t("an.anonymous")}
+                </Text>
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic title={t("an.pageviews")} value={analytics.pageviews} />
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {analytics.events} {t("an.events")}
+                </Text>
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic title={t("an.newDevices")} value={analytics.new_devices} />
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic title={t("an.bots")} value={analytics.bots} />
+              </Card>
+            </Col>
+          </Row>
 
           {analytics.total_visitors === 0 ? (
-            <div className="card">
-              <p className="muted" style={{ margin: 0 }}>{t("an.empty")}</p>
-            </div>
+            <Card>
+              <Empty description={t("an.empty")} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            </Card>
           ) : (
             <>
-              {/* AI insights */}
-              <div className="card">
-                <div className="card-title flex-between">
-                  <div>
-                    <h3 style={{ margin: 0 }}>🤖 {t("an.aiInsights")}</h3>
-                    <span className="section-hint">{t("an.aiHint")}</span>
-                  </div>
-                  <button className="btn btn-sm" onClick={generateInsights} disabled={aiBusy}>
-                    {aiBusy ? t("an.generating") : t("an.generate")}
-                  </button>
-                </div>
-                {insights && (
-                  <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{insights}</div>
-                )}
-              </div>
+              <Card
+                style={{ marginBottom: 16 }}
+                title={
+                  <Space>
+                    <RobotOutlined style={{ color: "#006c35" }} />
+                    {t("an.aiInsights")}
+                  </Space>
+                }
+                extra={
+                  <Button size="small" onClick={generateInsights} loading={aiBusy}>
+                    {t("an.generate")}
+                  </Button>
+                }
+              >
+                <Text type="secondary">{t("an.aiHint")}</Text>
+                {insights && <Paragraph style={{ whiteSpace: "pre-wrap", marginTop: 12, lineHeight: 1.6 }}>{insights}</Paragraph>}
+              </Card>
 
-              <div className="row" style={{ marginBottom: 18 }}>
-                <div className="card">
-                  <div className="card-title"><h3>{t("an.overTime")}</h3></div>
-                  <BarList data={analytics.timeseries} color="var(--brand)" />
-                </div>
-                <div className="card">
-                  <div className="card-title"><h3>{t("an.byDevice")}</h3></div>
-                  {analytics.by_device.length ? (
-                    <Donut
-                      data={analytics.by_device.map((d) => ({ label: d.label, value: d.value }))}
-                      centerValue={String(analytics.total_visitors)}
-                      centerLabel={t("an.visitors")}
-                    />
-                  ) : (
-                    <p className="muted">{t("common.none")}</p>
-                  )}
-                </div>
-              </div>
+              <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+                <Col xs={24} lg={12}>
+                  <Card title={t("an.overTime")} style={{ height: "100%" }}>
+                    <DistList data={analytics.timeseries} stroke="#006c35" />
+                  </Card>
+                </Col>
+                <Col xs={24} lg={12}>
+                  <Card title={t("an.byDevice")} style={{ height: "100%" }}>
+                    {analytics.by_device.length ? (
+                      <DistList data={analytics.by_device} />
+                    ) : (
+                      <Empty description={t("common.none")} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                    )}
+                  </Card>
+                </Col>
+              </Row>
 
-              <div className="row" style={{ marginBottom: 18 }}>
-                <div className="card">
-                  <div className="card-title"><h3>{t("an.byCountry")}</h3></div>
-                  <BarList data={analytics.by_country} />
-                </div>
-                <div className="card">
-                  <div className="card-title"><h3>{t("an.topPages")}</h3></div>
-                  <BarList data={analytics.top_pages} color="var(--gold)" />
-                </div>
-              </div>
+              <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+                <Col xs={24} lg={12}>
+                  <Card title={t("an.byCountry")} style={{ height: "100%" }}>
+                    {analytics.by_country.length ? (
+                      <DistList data={analytics.by_country} />
+                    ) : (
+                      <Empty description={t("common.none")} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                    )}
+                  </Card>
+                </Col>
+                <Col xs={24} lg={12}>
+                  <Card title={t("an.topPages")} style={{ height: "100%" }}>
+                    {analytics.top_pages.length ? (
+                      <DistList data={analytics.top_pages} stroke="#b88a2f" />
+                    ) : (
+                      <Empty description={t("common.none")} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                    )}
+                  </Card>
+                </Col>
+              </Row>
 
-              <div className="row" style={{ marginBottom: 18 }}>
-                <div className="card">
-                  <div className="card-title"><h3>{t("an.topReferrers")}</h3></div>
-                  {analytics.top_referrers.length ? (
-                    <BarList data={analytics.top_referrers} />
-                  ) : (
-                    <p className="muted">{t("common.none")}</p>
-                  )}
-                </div>
-                <div className="card">
-                  <div className="card-title"><h3>{t("an.utm")}</h3></div>
-                  {analytics.utm_sources.length ? (
-                    <BarList data={analytics.utm_sources} color="var(--brand)" />
-                  ) : (
-                    <p className="muted">{t("common.none")}</p>
-                  )}
-                </div>
-              </div>
+              <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+                <Col xs={24} lg={12}>
+                  <Card title={t("an.topReferrers")} style={{ height: "100%" }}>
+                    {analytics.top_referrers.length ? (
+                      <DistList data={analytics.top_referrers} />
+                    ) : (
+                      <Empty description={t("common.none")} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                    )}
+                  </Card>
+                </Col>
+                <Col xs={24} lg={12}>
+                  <Card title={t("an.utm")} style={{ height: "100%" }}>
+                    {analytics.utm_sources.length ? (
+                      <DistList data={analytics.utm_sources} stroke="#006c35" />
+                    ) : (
+                      <Empty description={t("common.none")} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                    )}
+                  </Card>
+                </Col>
+              </Row>
 
-              {/* Security alerts */}
-              <div className="card">
-                <div className="card-title"><h3>🛡️ {t("an.securityAlerts")}</h3></div>
+              <Card
+                title={
+                  <Space>
+                    <SafetyOutlined style={{ color: "#dc2626" }} />
+                    {t("an.securityAlerts")}
+                  </Space>
+                }
+                styles={{ body: { padding: analytics.security_alerts.length ? 0 : undefined } }}
+              >
                 {analytics.security_alerts.length === 0 ? (
-                  <p className="muted" style={{ margin: 0 }}>{t("an.noAlerts")}</p>
+                  <Text type="secondary">{t("an.noAlerts")}</Text>
                 ) : (
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>{t("admin.when")}</th>
-                          <th>{t("admin.user")}</th>
-                          <th>{t("admin.location")}</th>
-                          <th>{t("admin.newDevice")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {analytics.security_alerts.map((s, i) => (
-                          <tr key={i}>
-                            <td className="small muted">{dateStr(s.when)}</td>
-                            <td className="small">{s.user || "—"}</td>
-                            <td className="small">{s.location || "—"}</td>
-                            <td>
-                              <span className="badge badge-changes_requested">
-                                {t("admin.newDevice")}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <Table
+                    rowKey={(r) => `${r.when}-${r.user}-${r.location}`}
+                    columns={alertCols}
+                    dataSource={analytics.security_alerts}
+                    pagination={{ pageSize: 10, hideOnSinglePage: true }}
+                  />
                 )}
-              </div>
+              </Card>
             </>
           )}
         </>
       )}
 
       {tab === "audit" && (
-        <div className="card">
-          <div className="card-title flex-between">
-            <div>
-              <h3 style={{ margin: 0 }}>
-                {showApiLog ? t("admin.apiLog") : t("admin.events")}
-              </h3>
-              <span className="section-hint">{t("admin.auditHint")}</span>
-            </div>
-            <div className="flex" style={{ gap: 8 }}>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setShowApiLog((v) => !v)}
-              >
+        <Card
+          title={showApiLog ? t("admin.apiLog") : t("admin.events")}
+          styles={{ body: { padding: 0 } }}
+          extra={
+            <Space>
+              <Button size="small" onClick={() => setShowApiLog((v) => !v)}>
                 {showApiLog ? t("admin.events") : t("admin.showApiLog")}
-              </button>
+              </Button>
               {showApiLog && (
-                <button className="btn btn-danger btn-sm" onClick={clearApiLog}>
-                  {t("admin.clearApiLog")}
-                </button>
+                <Popconfirm title={t("admin.clearConfirm")} onConfirm={clearApiLog}>
+                  <Button size="small" danger>
+                    {t("admin.clearApiLog")}
+                  </Button>
+                </Popconfirm>
               )}
-            </div>
+            </Space>
+          }
+        >
+          <div style={{ padding: "12px 16px 0" }}>
+            <Text type="secondary">{t("admin.auditHint")}</Text>
           </div>
-
-          {showApiLog ? (
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t("admin.when")}</th>
-                    <th>{t("admin.actor")}</th>
-                    <th>{t("admin.method")}</th>
-                    <th>{t("admin.path")}</th>
-                    <th>{t("admin.statusCode")}</th>
-                    <th>{t("admin.latency")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {audit.map((a) => (
-                    <tr key={a.id}>
-                      <td className="small muted">{dateStr(a.created_at)}</td>
-                      <td className="small">{a.actor_email || "system"}</td>
-                      <td className="small">{a.method || "—"}</td>
-                      <td className="small muted">{a.path || "—"}</td>
-                      <td className="small">
-                        {a.status_code ? (
-                          <span className={a.status_code >= 400 ? "sev-high" : "rec-approve"}>
-                            {a.status_code}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="small muted">
-                        {a.latency_ms != null ? `${a.latency_ms}ms` : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t("admin.when")}</th>
-                    <th>{t("admin.actor")}</th>
-                    <th>{t("admin.summary")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {audit.map((a) => (
-                    <tr key={a.id}>
-                      <td className="small muted" style={{ whiteSpace: "nowrap" }}>
-                        {dateStr(a.created_at)}
-                      </td>
-                      <td className="small">
-                        {a.actor_email || "system"}
-                        {a.actor_role && (
-                          <span className="pill" style={{ marginInlineStart: 6 }}>
-                            {t(`role.${a.actor_role}`)}
-                          </span>
-                        )}
-                      </td>
-                      <td>{eventSummary(a)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+          <Table
+            rowKey="id"
+            columns={showApiLog ? apiLogCols : eventCols}
+            dataSource={audit}
+            pagination={{ pageSize: 20, hideOnSinglePage: true }}
+          />
+        </Card>
       )}
 
       {profile && (
@@ -618,12 +585,11 @@ const ACTION_LABEL: Record<string, string> = {
 function eventSummary(a: AuditEntry) {
   const label = ACTION_LABEL[a.action] || a.action.replace(/[._]/g, " ");
   const detail = a.detail as Record<string, unknown> | null | undefined;
-  const name =
-    (detail && (detail.filename || detail.organization || detail.device)) || "";
+  const name = (detail && (detail.filename || detail.organization || detail.device)) || "";
   return (
     <span>
       {label}
-      {name ? <span className="muted"> — {String(name)}</span> : null}
+      {name ? <Text type="secondary"> — {String(name)}</Text> : null}
     </span>
   );
 }

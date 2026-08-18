@@ -1,10 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  Alert,
+  Button,
+  Descriptions,
+  Drawer,
+  Empty,
+  List,
+  Skeleton,
+  Space,
+  Tag,
+  Timeline,
+  Typography,
+} from "antd";
+import { DownloadOutlined, DeleteOutlined } from "@ant-design/icons";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { Profile } from "@/lib/types";
-import { Skeleton } from "@/components/ui";
+
+const { Title, Text } = Typography;
 
 type Sev = "high" | "medium" | "info";
 
@@ -41,6 +56,9 @@ function netLabel(nt: string | null | undefined, t: (k: string) => string) {
   if (!nt) return "—";
   return `${NET_ICON[nt] || ""} ${t(`net.${nt}`)}`.trim();
 }
+
+const SEV_COLOR: Record<Sev, string> = { high: "red", medium: "orange", info: "green" };
+const RISK_COLOR: Record<string, string> = { high: "red", medium: "orange", low: "green" };
 
 function dt(v?: string | null) {
   if (!v) return "—";
@@ -87,163 +105,177 @@ export function VisitorProfile({
 
   async function erase() {
     if (!p || !p.visitor_id) return;
-    if (!window.confirm(t("prof.eraseConfirm"))) return;
     await api.eraseIdentity(p.visitor_id);
     onErased?.();
     onClose();
   }
 
-  const riskClass =
-    p?.risk_level === "high"
-      ? "risk-high"
-      : p?.risk_level === "medium"
-        ? "risk-medium"
-        : "risk-low";
-
   return (
-    <div className="drawer-overlay" onClick={onClose}>
-      <aside className="drawer" onClick={(e) => e.stopPropagation()}>
-        <div className="drawer-head">
-          <h2 style={{ margin: 0, fontSize: 18 }}>{t("prof.title")}</h2>
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>
-            {t("admin.close")}
-          </button>
-        </div>
-
-        {err && <div className="error">{err}</div>}
-        {!p ? (
-          <div className="stack" style={{ gap: 10 }}>
-            <Skeleton h={64} />
-            <Skeleton h={40} />
-            <Skeleton h={120} />
-          </div>
-        ) : (
-          <div className="drawer-body">
-            {/* Identity header + risk */}
-            <div className="prof-id">
-              <div>
-                <div style={{ fontWeight: 800, fontSize: 16 }}>
-                  {p.is_identified ? p.user_name || p.user_email : t("prof.anonymous")}
+    <Drawer
+      open
+      onClose={onClose}
+      width={480}
+      title={t("prof.title")}
+      styles={{ body: { paddingTop: 16 } }}
+      extra={
+        p && (
+          <Space>
+            <Button size="small" icon={<DownloadOutlined />} onClick={exportJson}>
+              {t("prof.export")}
+            </Button>
+            {p.visitor_id && (
+              <Button size="small" danger icon={<DeleteOutlined />} onClick={erase}>
+                {t("prof.erase")}
+              </Button>
+            )}
+          </Space>
+        )
+      }
+    >
+      {err && <Alert type="error" message={err} showIcon style={{ marginBottom: 12 }} />}
+      {!p ? (
+        <Skeleton active paragraph={{ rows: 8 }} />
+      ) : (
+        <>
+          {/* Identity header + risk */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+            <div>
+              <Title level={5} style={{ margin: 0 }}>
+                {p.is_identified ? p.user_name || p.user_email : t("prof.anonymous")}
+              </Title>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {p.is_identified ? p.user_email : p.visitor_id.slice(0, 16) + "…"}
+              </Text>
+              {p.role && (
+                <div>
+                  <Tag style={{ marginTop: 4 }}>{t(`role.${p.role}`)}</Tag>
                 </div>
-                <div className="small muted">
-                  {p.is_identified ? p.user_email : p.visitor_id.slice(0, 16) + "…"}
-                  {p.role && <span className="pill" style={{ marginInlineStart: 6 }}>{t(`role.${p.role}`)}</span>}
-                </div>
-                {p.organization && <div className="small muted">{p.organization}</div>}
-              </div>
-              <div className={`risk-badge ${riskClass}`}>
-                {t("prof.risk")}: {t(`prof.risk.${p.risk_level}`)}
-              </div>
+              )}
+              {p.organization && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {p.organization}
+                </Text>
+              )}
             </div>
+            <Tag color={RISK_COLOR[p.risk_level] ?? "default"} style={{ fontSize: 13, padding: "3px 10px" }}>
+              {t("prof.risk")}: {t(`prof.risk.${p.risk_level}`)}
+            </Tag>
+          </div>
 
-            {/* Risk signals — readable, severity-coloured */}
-            <div className="prof-signals">
+          {/* Risk signals */}
+          {p.risk_signals.length > 0 && (
+            <Space direction="vertical" size={6} style={{ width: "100%", margin: "14px 0" }}>
               {p.risk_signals.map((s) => {
                 const d = describeSignal(s, t);
                 return (
-                  <div key={s} className={`sig-row sig-${d.severity}`}>
-                    <span>{d.severity === "info" ? "✓" : "⚠️"}</span>
-                    <span>{d.text}</span>
-                  </div>
+                  <Alert
+                    key={s}
+                    type={d.severity === "info" ? "success" : d.severity === "high" ? "error" : "warning"}
+                    message={d.text}
+                    showIcon
+                    banner
+                    style={{ borderRadius: 6 }}
+                  />
                 );
               })}
-            </div>
+            </Space>
+          )}
 
-            {/* Overview */}
-            <dl className="kv" style={{ margin: "14px 0" }}>
-              <dt>{t("prof.firstSeen")}</dt>
-              <dd>{dt(p.first_seen)}</dd>
-              <dt>{t("prof.lastSeen")}</dt>
-              <dd>{dt(p.last_seen)}</dd>
-              <dt>{t("admin.location")}</dt>
-              <dd>{p.location || "—"}</dd>
-              <dt>{t("prof.connection")}</dt>
-              <dd>
-                {netLabel(p.network_type, t)}
-                {p.isp ? <span className="muted"> · {p.isp}</span> : null}
-              </dd>
-              <dt>{t("prof.timezone")}</dt>
-              <dd>{p.timezone || "—"}</dd>
-              <dt>{t("prof.referrer")}</dt>
-              <dd className="small">{p.first_referrer || "—"}</dd>
-            </dl>
+          {/* Overview */}
+          <Descriptions column={1} size="small" style={{ marginTop: 14 }}>
+            <Descriptions.Item label={t("prof.firstSeen")}>{dt(p.first_seen)}</Descriptions.Item>
+            <Descriptions.Item label={t("prof.lastSeen")}>{dt(p.last_seen)}</Descriptions.Item>
+            <Descriptions.Item label={t("admin.location")}>{p.location || "—"}</Descriptions.Item>
+            <Descriptions.Item label={t("prof.connection")}>
+              {netLabel(p.network_type, t)}
+              {p.isp ? <Text type="secondary"> · {p.isp}</Text> : null}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("prof.timezone")}>{p.timezone || "—"}</Descriptions.Item>
+            <Descriptions.Item label={t("prof.referrer")}>{p.first_referrer || "—"}</Descriptions.Item>
+          </Descriptions>
 
-            {/* Devices */}
-            <h3 className="prof-h">{t("prof.devices")} · {p.devices.length}</h3>
-            <div className="stack" style={{ gap: 6 }}>
-              {p.devices.map((d) => (
-                <div key={d.id} className="prof-row">
-                  <span>
-                    {d.device || d.platform || "—"}
-                    {d.is_bot && <span className="badge badge-rejected" style={{ marginInlineStart: 6 }}>bot</span>}
+          {/* Devices */}
+          <Title level={5} style={{ marginTop: 18 }}>
+            {t("prof.devices")} · {p.devices.length}
+          </Title>
+          <List
+            size="small"
+            dataSource={p.devices}
+            renderItem={(d) => (
+              <List.Item>
+                <div style={{ width: "100%" }}>
+                  <Space size={4} wrap>
+                    <Text>{d.device || d.platform || "—"}</Text>
+                    {d.is_bot && <Tag color="red">bot</Tag>}
                     {["vpn", "proxy", "tor", "hosting"].includes(d.network_type || "") && (
-                      <span className="badge badge-rejected" style={{ marginInlineStart: 6 }}>
-                        {netLabel(d.network_type, t)}
-                      </span>
+                      <Tag color="red">{netLabel(d.network_type, t)}</Tag>
                     )}
-                  </span>
-                  <span className="small muted">
-                    {d.location || "—"}
-                    {d.timezone ? ` · 🕓 ${d.timezone}` : ""} · {dt(d.last_seen)}
-                    {d.isp ? ` · ${d.isp}` : ""}
-                  </span>
+                  </Space>
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {d.location || "—"}
+                      {d.timezone ? ` · 🕓 ${d.timezone}` : ""} · {dt(d.last_seen)}
+                      {d.isp ? ` · ${d.isp}` : ""}
+                    </Text>
+                  </div>
                 </div>
-              ))}
-            </div>
-
-            {/* Sessions */}
-            <h3 className="prof-h">{t("prof.sessions")} · {p.sessions.length}</h3>
-            {p.sessions.length === 0 ? (
-              <p className="muted small">—</p>
-            ) : (
-              <div className="stack" style={{ gap: 6 }}>
-                {p.sessions.map((s) => (
-                  <div key={s.id} className="prof-row">
-                    <span>
-                      {s.device || "—"}
-                      {s.revoked ? (
-                        <span className="badge" style={{ marginInlineStart: 6 }}>{t("admin.revoked")}</span>
-                      ) : (
-                        <span className="badge badge-approved" style={{ marginInlineStart: 6 }}>{t("admin.active")}</span>
-                      )}
-                    </span>
-                    <span className="small muted">{s.location || "—"} · {dt(s.last_seen_at)}</span>
-                  </div>
-                ))}
-              </div>
+              </List.Item>
             )}
+          />
 
-            {/* Activity timeline */}
-            <h3 className="prof-h">{t("prof.activity")}</h3>
-            {p.events.length === 0 ? (
-              <p className="muted small">{t("prof.noEvents")}</p>
-            ) : (
-              <div className="timeline">
-                {p.events.map((e) => (
-                  <div key={e.id} className="tl-row">
-                    <span className="tl-dot" />
-                    <span className="tl-type">{e.type}</span>
-                    <span className="small muted tl-url">{e.url || ""}</span>
-                    <span className="small muted">{dt(e.created_at)}</span>
+          {/* Sessions */}
+          <Title level={5} style={{ marginTop: 18 }}>
+            {t("prof.sessions")} · {p.sessions.length}
+          </Title>
+          {p.sessions.length === 0 ? (
+            <Text type="secondary">—</Text>
+          ) : (
+            <List
+              size="small"
+              dataSource={p.sessions}
+              renderItem={(s) => (
+                <List.Item>
+                  <div style={{ width: "100%", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <Space size={4}>
+                      <Text>{s.device || "—"}</Text>
+                      <Tag color={s.revoked ? "default" : "green"}>{s.revoked ? t("admin.revoked") : t("admin.active")}</Tag>
+                    </Space>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {s.location || "—"} · {dt(s.last_seen_at)}
+                    </Text>
                   </div>
-                ))}
-              </div>
-            )}
-
-            {/* DSAR actions */}
-            <div className="flex" style={{ gap: 8, marginTop: 18 }}>
-              <button className="btn btn-secondary btn-sm" onClick={exportJson}>
-                {t("prof.export")}
-              </button>
-              {p.visitor_id && (
-                <button className="btn btn-danger btn-sm" onClick={erase}>
-                  {t("prof.erase")}
-                </button>
+                </List.Item>
               )}
-            </div>
-          </div>
-        )}
-      </aside>
-    </div>
+            />
+          )}
+
+          {/* Activity timeline */}
+          <Title level={5} style={{ marginTop: 18 }}>
+            {t("prof.activity")}
+          </Title>
+          {p.events.length === 0 ? (
+            <Empty description={t("prof.noEvents")} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          ) : (
+            <Timeline
+              items={p.events.map((e) => ({
+                children: (
+                  <div>
+                    <Text strong>{e.type}</Text>{" "}
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {e.url || ""}
+                    </Text>
+                    <div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        {dt(e.created_at)}
+                      </Text>
+                    </div>
+                  </div>
+                ),
+              }))}
+            />
+          )}
+        </>
+      )}
+    </Drawer>
   );
 }
