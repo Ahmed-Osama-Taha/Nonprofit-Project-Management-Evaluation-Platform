@@ -65,6 +65,7 @@ def _collect(
 ) -> CollectResult:
     ip = session_service.client_ip(request)
     location = session_service.lookup_location(ip)
+    network_type, isp = session_service.classify_network(ip)
     stored_ip = ip if settings.session_store_ip else None
 
     visitor = db.scalar(select(Visitor).where(Visitor.visitor_key == p.visitor_key))
@@ -110,6 +111,8 @@ def _collect(
         visitor.user_id = user.id
     visitor.ip = stored_ip
     visitor.location = location
+    visitor.network_type = network_type
+    visitor.isp = isp
     visitor.last_seen = datetime.now(timezone.utc)
     visitor.event_count = (visitor.event_count or 0) + 1
     db.flush()  # ensure visitor.id
@@ -127,5 +130,23 @@ def _collect(
             new_device=new_device,
         )
     )
+
+    # Real-time security notice: alert admins when a known user signs in from a
+    # device fingerprint never seen before (possible account takeover).
+    if new_device and user:
+        from app.models import User as UserModel
+        from app.models import UserRole
+        from app.services.audit import notify
+
+        where = location or visitor.device or "an unrecognised device"
+        for admin in db.scalars(
+            select(UserModel).where(UserModel.role == UserRole.admin)
+        ).all():
+            notify(
+                db,
+                user_id=admin.id,
+                message=f"⚠️ New-device sign-in: {user.email} from {where}",
+            )
+
     db.commit()
     return CollectResult(visitor_id=visitor.id, new_device=new_device)

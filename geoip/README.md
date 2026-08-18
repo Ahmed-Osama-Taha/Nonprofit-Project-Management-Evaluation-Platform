@@ -26,6 +26,23 @@ your network.
 3. Log out and back in — new sessions now show a coarse `City, Region, CC`
    location. Private / internal IPs still show **"Local network"**.
 
+## IP intelligence (VPN / proxy / hosting / ISP)
+
+To classify each IP as **VPN / public proxy / Tor / hosting-datacenter /
+residential-ISP**, drop one or both of these into this folder (also offline
+`.mmdb`, resolved in-process, no network):
+
+- **`GeoLite2-ASN.mmdb`** — *free* (MaxMind account). Gives the ISP / AS
+  organisation and lets us infer **hosting/datacenter vs residential** from the
+  network name. Good baseline.
+- **`GeoIP2-Anonymous-IP.mmdb`** — *paid* (MaxMind) or an equivalent IP2Location
+  proxy DB. Gives **precise** `is_anonymous_vpn` / `is_public_proxy` /
+  `is_tor_exit_node` / `is_hosting_provider` flags.
+
+Set `GEOIP_ASN_DB_PATH` / `GEOIP_ANONYMOUS_DB_PATH` if you name them differently.
+With neither present, network type reads "unknown" (no errors). A sign-in from a
+VPN/proxy/hosting network is flagged **High** in the identity risk panel.
+
 ## If you leave this folder empty
 
 Everything still works: public IPs simply have no location (blank), and

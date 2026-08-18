@@ -1,10 +1,42 @@
 "use client";
 
 import { useState } from "react";
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  Empty,
+  List,
+  Progress,
+  Row,
+  Space,
+  Spin,
+  Tag,
+  Typography,
+} from "antd";
+import { ThunderboltOutlined, ReloadOutlined } from "@ant-design/icons";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { AIAnalysis } from "@/lib/types";
-import { ScoreRing } from "@/components/ui";
+
+const { Title, Text, Paragraph } = Typography;
+
+const REC_TAG: Record<string, { color: string; key: string }> = {
+  approve: { color: "green", key: "review.approve" },
+  request_changes: { color: "orange", key: "review.requestChanges" },
+  reject: { color: "red", key: "review.reject" },
+};
+
+const SEV_COLOR: Record<string, string> = { high: "red", medium: "orange", low: "gold" };
+
+function scoreColor(v: number) {
+  if (v >= 75) return "#16a34a";
+  if (v >= 55) return "#b88a2f";
+  if (v >= 40) return "#d97706";
+  return "#dc2626";
+}
 
 export function AIPanel({
   projectId,
@@ -35,176 +67,189 @@ export function AIPanel({
   }
 
   const rec = analysis?.preliminary_recommendation;
+  const recTag = rec ? REC_TAG[rec] : undefined;
+  const processing = analysis?.status === "processing";
+  const score = Math.max(0, Math.min(100, Math.round(analysis?.preliminary_score ?? 0)));
 
   return (
-    <div className="card">
-      <div className="card-title">
-        <div>
-          <h3 style={{ margin: 0 }}>✦ {t("ai.title")}</h3>
-          <span className="section-hint">{t("ai.subtitle")}</span>
-        </div>
-        {canRerun && (
-          <button
-            className="btn btn-secondary btn-sm"
+    <Card
+      style={{ marginBottom: 16 }}
+      title={
+        <Space>
+          <ThunderboltOutlined style={{ color: "#006c35" }} />
+          <span>{t("ai.title")}</span>
+        </Space>
+      }
+      extra={
+        canRerun && (
+          <Button
+            icon={<ReloadOutlined />}
             onClick={rerun}
-            disabled={busy || analysis?.status === "processing"}
+            loading={busy || processing}
+            size="small"
           >
-            {busy || analysis?.status === "processing"
-              ? t("common.loading")
-              : t("proj.runAnalysis")}
-          </button>
-        )}
-      </div>
+            {t("proj.runAnalysis")}
+          </Button>
+        )
+      }
+    >
+      <Text type="secondary">{t("ai.subtitle")}</Text>
 
-      {err && <div className="error">{err}</div>}
+      {err && <Alert type="error" message={err} showIcon style={{ marginTop: 12 }} />}
 
-      {!analysis && <p className="muted">{t("ai.notRun")}</p>}
-      {analysis?.status === "processing" && (
-        <div className="flex">
-          <div className="spinner" />
-          <span className="muted">{t("common.loading")}</span>
-        </div>
+      {!analysis && (
+        <Empty description={t("ai.notRun")} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ marginTop: 12 }} />
       )}
+
+      {processing && (
+        <Space style={{ marginTop: 16 }}>
+          <Spin />
+          <Text type="secondary">{t("common.loading")}</Text>
+        </Space>
+      )}
+
       {analysis?.status === "failed" && (
-        <div className="error">
-          {analysis.error?.toLowerCase().includes("key")
-            ? t("ai.disabled")
-            : `${analysis.error || "error"}`}
-        </div>
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginTop: 12 }}
+          message={
+            analysis.error?.toLowerCase().includes("key")
+              ? t("ai.disabled")
+              : analysis.error || "error"
+          }
+        />
       )}
 
       {analysis?.status === "completed" && (
-        <div className="stack" style={{ gap: 18 }}>
-          <div className="flex wrap" style={{ gap: 24, alignItems: "center" }}>
-            <ScoreRing
-              score={analysis.preliminary_score}
-              caption={t("ai.readiness")}
-            />
-            <div className="stack" style={{ gap: 6 }}>
-              <div>
-                <span className="section-hint">{t("ai.recommendation")}: </span>
-                {rec ? (
-                  <span className={`rec-${rec}`}>
-                    {t(
-                      `review.${
-                        rec === "request_changes"
-                          ? "requestChanges"
-                          : rec === "approve"
-                            ? "approve"
-                            : "reject"
-                      }`,
-                    )}
-                  </span>
-                ) : (
-                  "—"
-                )}
+        <div style={{ marginTop: 16 }}>
+          <Row gutter={[24, 16]} align="middle">
+            <Col flex="none" style={{ textAlign: "center" }}>
+              <Progress
+                type="circle"
+                percent={score}
+                strokeColor={scoreColor(score)}
+                format={() => (analysis.preliminary_score == null ? "—" : score)}
+                size={112}
+              />
+              <div style={{ marginTop: 6 }}>
+                <Text type="secondary">{t("ai.readiness")}</Text>
               </div>
-              {analysis.category && (
+            </Col>
+            <Col flex="auto">
+              <Space direction="vertical" size={6} style={{ width: "100%" }}>
                 <div>
-                  <span className="section-hint">{t("proj.category")}: </span>
-                  <span className="pill">{analysis.category}</span>
+                  <Text type="secondary">{t("ai.recommendation")}: </Text>
+                  {recTag ? <Tag color={recTag.color}>{t(recTag.key)}</Tag> : "—"}
                 </div>
-              )}
-              {analysis.recommendation_rationale && (
-                <p className="small muted" style={{ margin: 0, maxWidth: "60ch" }}>
-                  {analysis.recommendation_rationale}
-                </p>
-              )}
-            </div>
-          </div>
+                {analysis.category && (
+                  <div>
+                    <Text type="secondary">{t("proj.category")}: </Text>
+                    <Tag>{analysis.category}</Tag>
+                  </div>
+                )}
+                {analysis.recommendation_rationale && (
+                  <Paragraph type="secondary" style={{ margin: 0, maxWidth: "60ch" }}>
+                    {analysis.recommendation_rationale}
+                  </Paragraph>
+                )}
+              </Space>
+            </Col>
+          </Row>
 
           {analysis.summary && (
-            <div>
-              <strong>{t("ai.summary")}</strong>
-              <p style={{ marginTop: 4 }}>{analysis.summary}</p>
+            <div style={{ marginTop: 20 }}>
+              <Title level={5}>{t("ai.summary")}</Title>
+              <Paragraph>{analysis.summary}</Paragraph>
             </div>
           )}
 
           {analysis.criteria && analysis.criteria.length > 0 && (
-            <div>
-              <strong>{t("ai.scorecard")}</strong>
-              <div style={{ marginTop: 10 }}>
-                {analysis.criteria.map((c, i) => (
-                  <div key={i} className="crit-row">
-                    <div className="crit-head">
-                      <span>{c.name}</span>
-                      <strong>{Math.round(c.score)}</strong>
-                    </div>
-                    <div className="bar-track">
-                      <div
-                        className="bar-fill"
-                        style={{ width: `${Math.max(0, Math.min(100, c.score))}%` }}
-                      />
-                    </div>
-                    {c.rationale && (
-                      <div className="small muted" style={{ marginTop: 3 }}>
-                        {c.rationale}
+            <div style={{ marginTop: 20 }}>
+              <Title level={5}>{t("ai.scorecard")}</Title>
+              <Space direction="vertical" size={14} style={{ width: "100%" }}>
+                {analysis.criteria.map((c, i) => {
+                  const cv = Math.max(0, Math.min(100, Math.round(c.score)));
+                  return (
+                    <div key={i}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <Text>{c.name}</Text>
+                        <Text strong>{cv}</Text>
                       </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                      <Progress percent={cv} strokeColor={scoreColor(cv)} showInfo={false} />
+                      {c.rationale && (
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {c.rationale}
+                        </Text>
+                      )}
+                    </div>
+                  );
+                })}
+              </Space>
             </div>
           )}
 
-          <div className="row">
+          <Row gutter={[24, 16]} style={{ marginTop: 20 }}>
             {analysis.strengths && analysis.strengths.length > 0 && (
-              <div>
-                <strong>{t("ai.strengths")}</strong>
-                <ul style={{ marginTop: 4 }}>
-                  {analysis.strengths.map((s, i) => (
-                    <li key={i}>{s}</li>
-                  ))}
-                </ul>
-              </div>
+              <Col xs={24} md={12}>
+                <List
+                  size="small"
+                  header={<Text strong>{t("ai.strengths")}</Text>}
+                  dataSource={analysis.strengths}
+                  renderItem={(s) => <List.Item>{s}</List.Item>}
+                />
+              </Col>
             )}
             {analysis.risks && analysis.risks.length > 0 && (
-              <div>
-                <strong>{t("ai.risks")}</strong>
-                <ul style={{ marginTop: 4 }}>
-                  {analysis.risks.map((r, i) => (
-                    <li key={i}>
-                      <span className={`sev-${r.severity}`}>[{r.severity}]</span>{" "}
-                      <strong>{r.title}</strong> — {r.detail}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <Col xs={24} md={12}>
+                <List
+                  size="small"
+                  header={<Text strong>{t("ai.risks")}</Text>}
+                  dataSource={analysis.risks}
+                  renderItem={(r) => (
+                    <List.Item>
+                      <Space size={4} wrap>
+                        <Tag color={SEV_COLOR[r.severity]}>{r.severity}</Tag>
+                        <Text strong>{r.title}</Text>
+                        <Text type="secondary">— {r.detail}</Text>
+                      </Space>
+                    </List.Item>
+                  )}
+                />
+              </Col>
             )}
-          </div>
+          </Row>
 
-          <div className="row">
-            {analysis.missing_information &&
-              analysis.missing_information.length > 0 && (
-                <div>
-                  <strong>{t("ai.missing")}</strong>
-                  <ul style={{ marginTop: 4 }}>
-                    {analysis.missing_information.map((m, i) => (
-                      <li key={i}>{m}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            {analysis.suggested_questions &&
-              analysis.suggested_questions.length > 0 && (
-                <div>
-                  <strong>{t("ai.questions")}</strong>
-                  <ul style={{ marginTop: 4 }}>
-                    {analysis.suggested_questions.map((q, i) => (
-                      <li key={i}>{q}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-          </div>
+          <Row gutter={[24, 16]} style={{ marginTop: 4 }}>
+            {analysis.missing_information && analysis.missing_information.length > 0 && (
+              <Col xs={24} md={12}>
+                <List
+                  size="small"
+                  header={<Text strong>{t("ai.missing")}</Text>}
+                  dataSource={analysis.missing_information}
+                  renderItem={(m) => <List.Item>{m}</List.Item>}
+                />
+              </Col>
+            )}
+            {analysis.suggested_questions && analysis.suggested_questions.length > 0 && (
+              <Col xs={24} md={12}>
+                <List
+                  size="small"
+                  header={<Text strong>{t("ai.questions")}</Text>}
+                  dataSource={analysis.suggested_questions}
+                  renderItem={(q) => <List.Item>{q}</List.Item>}
+                />
+              </Col>
+            )}
+          </Row>
 
           {analysis.model && (
-            <p className="small muted">
-              {t("ai.model")}: {analysis.model}
-            </p>
+            <Descriptions column={1} size="small" style={{ marginTop: 16 }}>
+              <Descriptions.Item label={t("ai.model")}>{analysis.model}</Descriptions.Item>
+            </Descriptions>
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

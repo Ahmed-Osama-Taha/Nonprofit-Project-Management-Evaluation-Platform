@@ -116,6 +116,8 @@ export interface VisitorSummary {
   user_email?: string | null;
   device?: string | null;
   is_bot?: boolean;
+  network_type?: string | null;
+  isp?: string | null;
   user_agent?: string | null;
   timezone?: string | null;
   screen?: string | null;
@@ -158,6 +160,9 @@ export interface Profile {
   last_seen: string;
   consent: string;
   location?: string | null;
+  timezone?: string | null;
+  network_type?: string | null;
+  isp?: string | null;
   first_referrer?: string | null;
   utm?: Record<string, unknown> | null;
   risk_level: string;

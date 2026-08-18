@@ -1,40 +1,73 @@
 "use client";
 
 import { useState } from "react";
+import {
+  Alert,
+  Button,
+  Card,
+  Input,
+  Space,
+  Tag,
+  Timeline,
+  Typography,
+} from "antd";
+import {
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  EditOutlined,
+  MessageOutlined,
+} from "@ant-design/icons";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { Project } from "@/lib/types";
-import { StatusBadge, dateStr } from "@/components/ui";
+import { dateStr } from "@/components/ui";
 
-function decisionBadge(d: string) {
-  if (d === "approve") return "approved";
-  if (d === "reject") return "rejected";
-  if (d === "request_changes") return "changes_requested";
-  return "submitted";
-}
+const { Text, Paragraph } = Typography;
+const { TextArea } = Input;
+
+const DECISION: Record<string, { status: string; color: string }> = {
+  approve: { status: "approved", color: "green" },
+  reject: { status: "rejected", color: "red" },
+  request_changes: { status: "changes_requested", color: "orange" },
+  comment: { status: "submitted", color: "blue" },
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  approved: "green",
+  rejected: "red",
+  changes_requested: "orange",
+  submitted: "blue",
+  under_review: "gold",
+  draft: "default",
+};
 
 /** Read-only history of reviewer decisions on a project. */
 export function Reviews({ project }: { project: Project }) {
   const { t } = useI18n();
   if (!project.reviews || project.reviews.length === 0) return null;
   return (
-    <div className="card">
-      <div className="card-title">
-        <h3 style={{ margin: 0 }}>{t("proj.reviews")}</h3>
-      </div>
-      {project.reviews.map((r) => (
-        <div key={r.id} className="list-item">
-          <div className="flex-between">
-            <strong>{r.reviewer.full_name}</strong>
-            <span className={`badge badge-${decisionBadge(r.decision)}`}>
-              {t(`status.${decisionBadge(r.decision)}`)}
-            </span>
-          </div>
-          {r.comment && <p style={{ margin: "6px 0 0" }}>{r.comment}</p>}
-          <div className="small muted">{dateStr(r.created_at)}</div>
-        </div>
-      ))}
-    </div>
+    <Card title={t("proj.reviews")} style={{ marginBottom: 16 }}>
+      <Timeline
+        items={project.reviews.map((r) => {
+          const d = DECISION[r.decision] ?? DECISION.comment;
+          return {
+            color: d.color === "default" ? "gray" : d.color,
+            children: (
+              <div>
+                <Space wrap>
+                  <Text strong>{r.reviewer.full_name}</Text>
+                  <Tag color={d.color}>{t(`status.${d.status}`)}</Tag>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {dateStr(r.created_at)}
+                  </Text>
+                </Space>
+                {r.comment && <Paragraph style={{ margin: "6px 0 0" }}>{r.comment}</Paragraph>}
+              </div>
+            ),
+          };
+        })}
+      />
+    </Card>
   );
 }
 
@@ -48,16 +81,14 @@ export function ReviewActions({
 }) {
   const { t } = useI18n();
   const [comment, setComment] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
 
   const decided = ["approved", "rejected"].includes(project.status);
   const notSubmitted = project.status === "draft";
 
-  async function act(
-    decision: "comment" | "request_changes" | "approve" | "reject"
-  ) {
-    setBusy(true);
+  async function act(decision: "comment" | "request_changes" | "approve" | "reject") {
+    setBusy(decision);
     setErr("");
     try {
       await api.createReview(project.id, decision, comment || undefined);
@@ -66,7 +97,7 @@ export function ReviewActions({
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Action failed");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -74,44 +105,48 @@ export function ReviewActions({
 
   if (decided)
     return (
-      <div className="card">
-        <p className="muted flex">
-          {t("review.decision")}: <StatusBadge status={project.status} />
-        </p>
-      </div>
+      <Card style={{ marginBottom: 16 }}>
+        <Space>
+          <Text type="secondary">{t("review.decision")}:</Text>
+          <Tag color={STATUS_COLOR[project.status]}>{t(`status.${project.status}`)}</Tag>
+        </Space>
+      </Card>
     );
 
   return (
-    <div className="card">
-      <div className="card-title">
-        <div>
-          <h3 style={{ margin: 0 }}>{t("review.decision")}</h3>
-          <span className="section-hint">{t("ai.subtitle")}</span>
-        </div>
-      </div>
-      {err && <div className="error">{err}</div>}
-      <div className="field">
-        <label>{t("review.comment")}</label>
-        <textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder={t("review.addComment")}
-        />
-      </div>
-      <div className="chip-row">
-        <button className="btn btn-secondary" onClick={() => act("comment")} disabled={busy}>
+    <Card style={{ marginBottom: 16 }} title={t("review.decision")}>
+      <Text type="secondary">{t("ai.subtitle")}</Text>
+      {err && <Alert type="error" message={err} showIcon style={{ margin: "12px 0" }} />}
+      <TextArea
+        rows={3}
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        placeholder={t("review.addComment")}
+        style={{ margin: "12px 0" }}
+      />
+      <Space wrap>
+        <Button icon={<MessageOutlined />} loading={busy === "comment"} onClick={() => act("comment")}>
           {t("review.comment")}
-        </button>
-        <button className="btn btn-warning" onClick={() => act("request_changes")} disabled={busy}>
+        </Button>
+        <Button
+          icon={<EditOutlined />}
+          loading={busy === "request_changes"}
+          onClick={() => act("request_changes")}
+        >
           {t("review.requestChanges")}
-        </button>
-        <button className="btn btn-success" onClick={() => act("approve")} disabled={busy}>
+        </Button>
+        <Button
+          type="primary"
+          icon={<CheckCircleOutlined />}
+          loading={busy === "approve"}
+          onClick={() => act("approve")}
+        >
           {t("review.approve")}
-        </button>
-        <button className="btn btn-danger" onClick={() => act("reject")} disabled={busy}>
+        </Button>
+        <Button danger icon={<CloseCircleOutlined />} loading={busy === "reject"} onClick={() => act("reject")}>
           {t("review.reject")}
-        </button>
-      </div>
-    </div>
+        </Button>
+      </Space>
+    </Card>
   );
 }

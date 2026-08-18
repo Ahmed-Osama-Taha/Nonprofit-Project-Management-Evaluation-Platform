@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Athar (أثر) — GCC / Saudi identity. Light + dark, RTL + LTR aware. */
 :root {
   --brand: #006c35; /* Saudi green */
@@ -71,23 +75,72 @@ html, body {
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  /* Mobile: prevent iOS text auto-inflation + tap flash. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
+/* Stop accidental horizontal scroll WITHOUT breaking sticky/momentum scroll on
+   iOS — `overflow-x: hidden` on html/body does; `clip` on body alone does not. */
+body { overflow-x: clip; }
+img, svg, video, canvas { max-width: 100%; height: auto; }
 a { color: var(--brand-600); text-decoration: none; }
 a:hover { text-decoration: underline; }
 h1, h2, h3 { letter-spacing: -0.01em; }
 
 .container { max-width: 1140px; margin: 0 auto; padding: 26px 20px 72px; }
 
+/* iOS notch / home-indicator safe areas (matters in PWA standalone mode). */
+.nav { padding-top: env(safe-area-inset-top); }
+.container {
+  padding-inline: max(20px, env(safe-area-inset-left)) max(20px, env(safe-area-inset-right));
+  padding-bottom: max(72px, env(safe-area-inset-bottom));
+}
+
+/* ── Small phones ────────────────────────────────── */
+@media (max-width: 520px) {
+  .container { padding-top: 18px; padding-inline: max(14px, env(safe-area-inset-left)) max(14px, env(safe-area-inset-right)); }
+  .card { padding: 16px; }
+  .page-head h1 { font-size: 20px; }
+  .hero { padding: 20px 18px; }
+  .hero h1 { font-size: 23px; }
+  h1 { font-size: 22px; }
+  /* Horizontal-scroll rows of pills/tabs instead of wrapping into tall stacks */
+  .chip-row, .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .chip-row::-webkit-scrollbar, .tabs::-webkit-scrollbar { display: none; }
+  table { font-size: 13px; }
+  th, td { padding: 9px 8px; }
+  .drawer { width: 100%; }
+  .btn { padding: 11px 15px; }   /* larger tap target */
+}
+
 /* ── Nav ─────────────────────────────────────────── */
 .nav {
-  background: color-mix(in srgb, var(--card) 88%, transparent);
-  backdrop-filter: saturate(150%) blur(10px);
+  /* Solid fallback FIRST — older iOS Safari (<16.2) can't parse color-mix and
+     would drop the whole background, leaving the sticky nav transparent. */
+  background: var(--card);
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 20;
 }
+@supports (backdrop-filter: blur(10px)) or (-webkit-backdrop-filter: blur(10px)) {
+  .nav {
+    background: color-mix(in srgb, var(--card) 90%, transparent);
+    -webkit-backdrop-filter: saturate(150%) blur(10px);
+    backdrop-filter: saturate(150%) blur(10px);
+  }
+}
 .nav-inner {
   max-width: 1140px; margin: 0 auto; padding: 12px 20px;
-  display: flex; align-items: center; gap: 16px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.nav-user {
+  max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .nav-inner { gap: 8px; padding: 10px 14px; }
+  .brand-sub { display: none; }
+  .nav-links { order: 3; width: 100%; margin-inline-start: 0; overflow-x: auto; flex-wrap: nowrap; }
+  .nav-spacer { display: none; }
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 17px; color: var(--text); }
 .brand:hover { text-decoration: none; }
@@ -158,7 +211,7 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
 input, textarea, select {
   width: 100%; padding: 10px 12px; border: 1px solid var(--border);
-  border-radius: 10px; font-size: 14px; font-family: inherit;
+  border-radius: 10px; font-size: 16px; font-family: inherit;  /* 16px: no iOS zoom-on-focus */
   background: var(--card-2); color: var(--text);
 }
 input:focus, textarea:focus, select:focus { outline: none; border-color: var(--brand); box-shadow: var(--ring); }
@@ -377,8 +430,11 @@ label .req { color: var(--danger); margin-inline-start: 3px; }
 .risk-low { background: #dcfce7; color: #15803d; }
 .risk-medium { background: #fef3c7; color: #b45309; }
 .risk-high { background: #fee2e2; color: #b91c1c; }
-.prof-signals { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.prof-signals .chip { font-size: 11px; font-family: monospace; background: var(--card-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; color: var(--muted); }
+.prof-signals { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.sig-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 11px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+.sig-high { background: #fee2e2; color: #b91c1c; }
+.sig-medium { background: #fef3c7; color: #b45309; }
+.sig-info { background: #dcfce7; color: #15803d; }
 .prof-h { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 8px; }
 .prof-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; background: var(--card-2); border-radius: 8px; font-size: 13px; }
 .timeline { display: flex; flex-direction: column; gap: 0; }

@@ -11,11 +11,31 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+# Coarse IANA timezone -> ISO country code. Enough to catch the common
+# "device says one country, IP says another" VPN/proxy tell. Unknown zones are
+# simply skipped (no false positives).
+_TZ_COUNTRY = {
+    "Asia/Riyadh": "SA", "Asia/Dubai": "AE", "Asia/Qatar": "QA", "Asia/Kuwait": "KW",
+    "Asia/Bahrain": "BH", "Asia/Muscat": "OM", "Asia/Baghdad": "IQ", "Asia/Amman": "JO",
+    "Asia/Beirut": "LB", "Asia/Jerusalem": "IL", "Asia/Tehran": "IR", "Asia/Karachi": "PK",
+    "Asia/Kolkata": "IN", "Asia/Dhaka": "BD", "Asia/Istanbul": "TR", "Europe/Istanbul": "TR",
+    "Africa/Cairo": "EG", "Africa/Casablanca": "MA", "Africa/Tunis": "TN", "Africa/Algiers": "DZ",
+    "Europe/London": "GB", "Europe/Paris": "FR", "Europe/Berlin": "DE", "Europe/Rome": "IT",
+    "Europe/Madrid": "ES", "Europe/Amsterdam": "NL", "Europe/Moscow": "RU", "Europe/Kyiv": "UA",
+    "America/New_York": "US", "America/Chicago": "US", "America/Los_Angeles": "US",
+    "America/Toronto": "CA", "America/Sao_Paulo": "BR", "Asia/Shanghai": "CN",
+    "Asia/Tokyo": "JP", "Asia/Singapore": "SG", "Australia/Sydney": "AU",
+}
+
 
 def _country(loc: str | None) -> str | None:
     if not loc or loc == "Local network":
         return None
     return loc.split(",")[-1].strip() or None
+
+
+def _tz_country(tz: str | None) -> str | None:
+    return _TZ_COUNTRY.get(tz or "")
 
 
 def compute_risk(devices, sessions, events) -> tuple[str, list[str]]:
@@ -30,6 +50,14 @@ def compute_risk(devices, sessions, events) -> tuple[str, list[str]]:
         signals.append("bot_device")
         medium = True
 
+    # Anonymising network (VPN / public proxy / Tor / datacenter hosting).
+    nets = {getattr(d, "network_type", None) for d in devices}
+    for kind in ("tor", "vpn", "proxy", "hosting"):
+        if kind in nets:
+            signals.append(f"anon_network:{kind}")
+            high = True
+            break
+
     # New-device logins (fingerprint never seen before for this user).
     nd = sum(1 for e in events if getattr(e, "new_device", False))
     if nd:
@@ -40,6 +68,15 @@ def compute_risk(devices, sessions, events) -> tuple[str, list[str]]:
     if len(devices) >= 4:
         signals.append(f"many_devices:{len(devices)}")
         medium = True
+
+    # Device timezone vs IP-geolocated country mismatch (VPN / proxy / spoof).
+    for d in devices:
+        tz_c = _tz_country(getattr(d, "timezone", None))
+        loc_c = _country(getattr(d, "location", None))
+        if tz_c and loc_c and tz_c != loc_c:
+            signals.append(f"location_mismatch:{tz_c}!={loc_c}")
+            high = True
+            break
 
     # Multiple distinct countries across sessions/devices.
     locs = [getattr(s, "location", None) for s in sessions]

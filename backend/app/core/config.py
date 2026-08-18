@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # (required for a no-egress / security-compliant environment). Blank or a
     # missing file -> IPs are classified only as "Local network" vs unknown.
     geoip_db_path: str = ""
+    # IP intelligence (also offline .mmdb, mounted alongside the City DB):
+    #   ASN DB (free GeoLite2-ASN) -> ISP / AS org, + hosting-vs-residential.
+    #   Anonymous-IP DB (paid GeoIP2, optional) -> precise VPN/proxy/Tor/hosting.
+    geoip_asn_db_path: str = ""
+    geoip_anonymous_db_path: str = ""
     # Privacy: when False (the default), login IPs are NOT stored at all — only
     # device, coarse location, and timestamps. Recommended for a public shared
     # demo so one demo user can't see another's IP. Set True on a private,

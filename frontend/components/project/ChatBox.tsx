@@ -1,19 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import { Alert, Card, Collapse, Input, Space, Typography } from "antd";
+import { RobotOutlined } from "@ant-design/icons";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+
+const { Paragraph, Text } = Typography;
+const { Search } = Input;
 
 /** Reviewer assistant: ask grounded (RAG) questions about a project. */
 export function ChatBox({ projectId }: { projectId: string }) {
   const { t, lang } = useI18n();
-  const [q, setQ] = useState("");
   const [answer, setAnswer] = useState("");
   const [sources, setSources] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  async function ask() {
+  async function ask(q: string) {
     if (!q.trim()) return;
     setBusy(true);
     setErr("");
@@ -30,44 +34,52 @@ export function ChatBox({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="card">
-      <div className="card-title">
-        <h3 style={{ margin: 0 }}>{t("ai.ask")}</h3>
-      </div>
-      {err && <div className="error">{err}</div>}
-      <div className="flex">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={t("ai.askPlaceholder")}
-          onKeyDown={(e) => e.key === "Enter" && ask()}
-        />
-        <button className="btn" onClick={ask} disabled={busy}>
-          {busy ? "…" : t("ai.ask")}
-        </button>
-      </div>
+    <Card
+      style={{ marginBottom: 16 }}
+      title={
+        <Space>
+          <RobotOutlined style={{ color: "#006c35" }} />
+          <span>{t("ai.ask")}</span>
+        </Space>
+      }
+    >
+      {err && <Alert type="error" message={err} showIcon style={{ marginBottom: 12 }} />}
+      <Search
+        placeholder={t("ai.askPlaceholder")}
+        enterButton={t("ai.ask")}
+        loading={busy}
+        onSearch={ask}
+        size="large"
+      />
       {answer && (
-        <div style={{ marginTop: 12 }}>
-          <p style={{ whiteSpace: "pre-wrap" }}>{answer}</p>
+        <div style={{ marginTop: 16 }}>
+          <Paragraph style={{ whiteSpace: "pre-wrap" }}>{answer}</Paragraph>
           {sources.length > 0 && (
-            <details>
-              <summary className="small muted">{sources.length}</summary>
-              {sources.map((s, i) => (
-                <p
-                  key={i}
-                  className="small muted"
-                  style={{
-                    borderInlineStart: "3px solid var(--border)",
-                    paddingInlineStart: 8,
-                  }}
-                >
-                  {s.slice(0, 300)}…
-                </p>
-              ))}
-            </details>
+            <Collapse
+              ghost
+              items={[
+                {
+                  key: "src",
+                  label: <Text type="secondary">{sources.length} {t("ai.sources")}</Text>,
+                  children: (
+                    <Space direction="vertical" style={{ width: "100%" }}>
+                      {sources.map((s, i) => (
+                        <Text
+                          key={i}
+                          type="secondary"
+                          style={{ borderInlineStart: "3px solid #eee", paddingInlineStart: 8, display: "block" }}
+                        >
+                          {s.slice(0, 300)}…
+                        </Text>
+                      ))}
+                    </Space>
+                  ),
+                },
+              ]}
+            />
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
