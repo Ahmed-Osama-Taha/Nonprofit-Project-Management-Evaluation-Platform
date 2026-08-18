@@ -1,0 +1,4 @@
+# Never commit the geolocation DB (licensing + size). Obtain it out-of-band and
+# place it here; see README.md.
+*.mmdb
+*.dat

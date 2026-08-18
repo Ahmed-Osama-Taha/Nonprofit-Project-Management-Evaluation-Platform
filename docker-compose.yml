@@ -101,10 +101,10 @@ services:
       # location still is), so a shared demo can't leak one user's IP to another.
       # Set true on a private deployment for security forensics.
       SESSION_STORE_IP: ${SESSION_STORE_IP:-false}
-      # Geolocation: mount a MaxMind GeoLite2 DB (offline) or enable the HTTPS
-      # API fallback (needs egress). Both off -> location shows "Local"/blank.
-      GEOIP_DB_PATH: ${GEOIP_DB_PATH:-}
-      GEOIP_API_ENABLED: ${GEOIP_API_ENABLED:-false}
+      # Geolocation is FULLY OFFLINE: drop a City .mmdb into ./geoip (see
+      # geoip/README.md) and it resolves in-process with zero network calls.
+      # Missing file -> IPs are just classified "Local network" / unknown.
+      GEOIP_DB_PATH: ${GEOIP_DB_PATH:-/geoip/GeoLite2-City.mmdb}
       # Rate limiting (Redis-backed; no-op without Redis).
       RATE_LIMIT_IP_MAX: ${RATE_LIMIT_IP_MAX:-300}
       RATE_LIMIT_TENANT_MAX: ${RATE_LIMIT_TENANT_MAX:-600}
@@ -157,6 +157,9 @@ services:
       SEED_REVIEWER_PASSWORD: ${SEED_REVIEWER_PASSWORD:-Reviewer123!}
       SEED_ORG_EMAIL: ${SEED_ORG_EMAIL:-org@demo.org}
       SEED_ORG_PASSWORD: ${SEED_ORG_PASSWORD:-Org123!}
+    volumes:
+      # Offline geolocation DB (read-only). Optional — drop a City .mmdb here.
+      - ./geoip:/geoip:ro
     ports:
       - "8000:8000"
 

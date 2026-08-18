@@ -87,13 +87,38 @@ def client_ip(request: Request) -> str | None:
 
 
 # ── Best-effort geolocation ─────────────────────────────────────
-def lookup_location(ip: str | None) -> str | None:
-    """Resolve an IP to a coarse 'City, Region, CC' label — best effort only.
+# Cache the opened DB reader (and whether we've tried) so we don't reopen the
+# file on every login. `_READER is False` means "tried and unavailable".
+_READER: object | None = None
 
-    Private/loopback addresses resolve to 'Local network'. Real geolocation is
-    opt-in via a local MaxMind DB (``settings.geoip_db_path``): we never call an
-    external service, so this stays offline- and CI-safe and leaks no PII.
-    """
+
+def _reader():
+    """Lazily open the local .mmdb reader, or None if unavailable. Fully
+    offline — no network access is ever performed."""
+    global _READER
+    if _READER is not None:
+        return _READER or None
+    db_path = getattr(settings, "geoip_db_path", "") or ""
+    if not db_path:
+        _READER = False
+        return None
+    try:
+        import geoip2.database  # type: ignore
+
+        _READER = geoip2.database.Reader(db_path)
+    except Exception:  # noqa: BLE001 — missing lib/file -> geolocation disabled
+        _READER = False
+        return None
+    return _READER
+
+
+def lookup_location(ip: str | None) -> str | None:
+    """Resolve an IP to a coarse 'City, Region, CC' label — fully offline.
+
+    Private/loopback addresses resolve to 'Local network'. Public addresses are
+    resolved against a locally mounted MaxMind-format .mmdb DB
+    (``settings.geoip_db_path``). No external service is ever contacted, so this
+    is safe for a no-egress, security-compliant deployment (and CI)."""
     if not ip:
         return None
     try:
@@ -103,49 +128,18 @@ def lookup_location(ip: str | None) -> str | None:
     except ValueError:
         return None
 
-    # 1) Local MaxMind GeoLite2 DB (offline; resolves IPv4 + IPv6).
-    db_path = getattr(settings, "geoip_db_path", "") or ""
-    if db_path:
-        try:
-            import geoip2.database  # type: ignore
-
-            with geoip2.database.Reader(db_path) as reader:
-                r = reader.city(ip)
-                parts = [
-                    r.city.name,
-                    r.subdivisions.most_specific.name if r.subdivisions else None,
-                    r.country.iso_code,
-                ]
-                loc = ", ".join(p for p in parts if p)
-                if loc:
-                    return loc
-        except Exception:  # noqa: BLE001 — geo is a nicety, never fail login
-            pass
-
-    # 2) Optional HTTPS geo API fallback (opt-in; no external calls by default).
-    if getattr(settings, "geoip_api_enabled", False):
-        return _lookup_via_api(ip)
-    return None
-
-
-def _lookup_via_api(ip: str) -> str | None:
-    """Best-effort coarse geolocation via an HTTPS API. Timeout-guarded and
-    fully swallowed on error so a slow/blocked lookup never delays login."""
+    reader = _reader()
+    if reader is None:
+        return None
     try:
-        import httpx
-
-        url = settings.geoip_api_url.format(ip=ip)
-        r = httpx.get(url, timeout=3, headers={"User-Agent": "athar/1.0"})
-        if r.status_code != 200:
-            return None
-        d = r.json()
+        r = reader.city(ip)  # resolves IPv4 and IPv6
         parts = [
-            d.get("city"),
-            d.get("region") or d.get("region_code"),
-            d.get("country_code") or d.get("country"),
+            r.city.name,
+            r.subdivisions.most_specific.name if r.subdivisions else None,
+            r.country.iso_code,
         ]
-        return ", ".join(str(p) for p in parts if p) or None
-    except Exception:  # noqa: BLE001 — never fail a login on geolocation
+        return ", ".join(p for p in parts if p) or None
+    except Exception:  # noqa: BLE001 — unknown IP / lookup error -> no location
         return None
 
 
