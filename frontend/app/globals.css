@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Athar (أثر) — GCC / Saudi identity. Light + dark, RTL + LTR aware. */
 :root {
   --brand: #006c35; /* Saudi green */

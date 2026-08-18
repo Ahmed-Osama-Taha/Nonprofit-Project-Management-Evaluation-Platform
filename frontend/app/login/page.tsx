@@ -3,8 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { LogIn, ShieldCheck } from "lucide-react";
 import { useAuth, homeForRole } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { Button, Card, CardContent, Input, Label } from "@/components/uikit";
 
 const DEMO = [
   { role: "organization", email: "org@demo.org", password: "Org123!" },
@@ -36,73 +38,90 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth-wrap">
-      <div className="hero" style={{ textAlign: "center" }}>
-        <div
-          className="brand-mark"
-          style={{ width: 46, height: 46, margin: "0 auto 12px", fontSize: 22 }}
-        >
+    <div className="mx-auto flex min-h-[80vh] w-full max-w-md flex-col justify-center py-10">
+      {/* Brand */}
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-2xl font-extrabold text-white shadow-soft">
           أ
         </div>
-        <h1 style={{ margin: 0 }}>
+        <h1 className="m-0 text-2xl font-extrabold tracking-tight text-fg">
           {t("app.name")} · Athar
         </h1>
-        <p style={{ margin: "6px auto 0" }}>{t("app.tagline")}</p>
+        <p className="mt-1.5 text-sm text-muted">{t("app.tagline")}</p>
       </div>
 
-      <div className="card">
-        <div className="card-title">
-          <h2 style={{ margin: 0 }}>{t("auth.signIn")}</h2>
-        </div>
-        {err && <div className="error">{err}</div>}
-        <form onSubmit={submit}>
-          <div className="field">
-            <label>{t("auth.email")}</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="field">
-            <label>{t("auth.password")}</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <button className="btn" disabled={busy} style={{ width: "100%" }}>
-            {busy ? t("common.loading") : t("auth.signIn")}
-          </button>
-        </form>
-        <p className="small muted" style={{ marginTop: 14 }}>
-          {t("auth.noAccount")}{" "}
-          <Link href="/register">{t("auth.registerOrg")}</Link>
-        </p>
-      </div>
+      <Card className="animate-slide-up">
+        <CardContent className="p-6">
+          <h2 className="mb-4 text-lg font-bold text-fg">{t("auth.signIn")}</h2>
+          {err && (
+            <div className="mb-4 rounded-md border border-danger/30 bg-danger/10 px-3 py-2.5 text-sm text-danger">
+              {err}
+            </div>
+          )}
+          <form onSubmit={submit} className="space-y-4">
+            <div>
+              <Label>{t("auth.email")}</Label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                placeholder="you@example.org"
+              />
+            </div>
+            <div>
+              <Label>{t("auth.password")}</Label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                placeholder="••••••••"
+              />
+            </div>
+            <Button className="w-full" size="lg" disabled={busy}>
+              <LogIn className="h-4 w-4" />
+              {busy ? t("common.loading") : t("auth.signIn")}
+            </Button>
+          </form>
+          <p className="mt-4 text-sm text-muted">
+            {t("auth.noAccount")}{" "}
+            <Link href="/register" className="font-semibold text-brand-700 hover:underline">
+              {t("auth.registerOrg")}
+            </Link>
+          </p>
+        </CardContent>
+      </Card>
 
-      <div className="card">
-        <div className="card-title">
-          <h3 style={{ margin: 0 }}>{t("auth.demoAccounts")}</h3>
-        </div>
-        <div className="stack">
-          {DEMO.map((d) => (
-            <button
-              key={d.email}
-              className="btn btn-secondary btn-sm"
-              onClick={() => {
-                setEmail(d.email);
-                setPassword(d.password);
-              }}
-            >
-              {t(`role.${d.role}`)} — {d.email}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* Demo accounts */}
+      <Card className="mt-4">
+        <CardContent className="p-5">
+          <div className="mb-3 flex items-center gap-2 text-sm font-bold text-fg">
+            <ShieldCheck className="h-4 w-4 text-brand" />
+            {t("auth.demoAccounts")}
+          </div>
+          <div className="grid gap-2">
+            {DEMO.map((d) => (
+              <Button
+                key={d.email}
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="justify-between"
+                onClick={() => {
+                  setEmail(d.email);
+                  setPassword(d.password);
+                }}
+              >
+                <span>{t(`role.${d.role}`)}</span>
+                <span className="font-mono text-xs opacity-70">{d.email}</span>
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
