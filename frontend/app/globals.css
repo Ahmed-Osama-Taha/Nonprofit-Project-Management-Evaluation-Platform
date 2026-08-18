@@ -71,12 +71,14 @@ html, body {
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  /* Mobile: no accidental horizontal scroll, no iOS text auto-inflation. */
-  overflow-x: hidden;
+  /* Mobile: prevent iOS text auto-inflation + tap flash. */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
 }
+/* Stop accidental horizontal scroll WITHOUT breaking sticky/momentum scroll on
+   iOS — `overflow-x: hidden` on html/body does; `clip` on body alone does not. */
+body { overflow-x: clip; }
 img, svg, video, canvas { max-width: 100%; height: auto; }
 a { color: var(--brand-600); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -110,10 +112,18 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 
 /* ── Nav ─────────────────────────────────────────── */
 .nav {
-  background: color-mix(in srgb, var(--card) 88%, transparent);
-  backdrop-filter: saturate(150%) blur(10px);
+  /* Solid fallback FIRST — older iOS Safari (<16.2) can't parse color-mix and
+     would drop the whole background, leaving the sticky nav transparent. */
+  background: var(--card);
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 20;
+}
+@supports (backdrop-filter: blur(10px)) or (-webkit-backdrop-filter: blur(10px)) {
+  .nav {
+    background: color-mix(in srgb, var(--card) 90%, transparent);
+    -webkit-backdrop-filter: saturate(150%) blur(10px);
+    backdrop-filter: saturate(150%) blur(10px);
+  }
 }
 .nav-inner {
   max-width: 1140px; margin: 0 auto; padding: 12px 20px;
