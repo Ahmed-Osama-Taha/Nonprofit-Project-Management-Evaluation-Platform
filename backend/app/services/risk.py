@@ -50,6 +50,14 @@ def compute_risk(devices, sessions, events) -> tuple[str, list[str]]:
         signals.append("bot_device")
         medium = True
 
+    # Anonymising network (VPN / public proxy / Tor / datacenter hosting).
+    nets = {getattr(d, "network_type", None) for d in devices}
+    for kind in ("tor", "vpn", "proxy", "hosting"):
+        if kind in nets:
+            signals.append(f"anon_network:{kind}")
+            high = True
+            break
+
     # New-device logins (fingerprint never seen before for this user).
     nd = sum(1 for e in events if getattr(e, "new_device", False))
     if nd:

@@ -105,6 +105,10 @@ services:
       # geoip/README.md) and it resolves in-process with zero network calls.
       # Missing file -> IPs are just classified "Local network" / unknown.
       GEOIP_DB_PATH: ${GEOIP_DB_PATH:-/geoip/GeoLite2-City.mmdb}
+      # IP intelligence (offline): ASN DB (free) -> ISP + hosting-vs-residential;
+      # Anonymous-IP DB (optional, paid) -> precise VPN/proxy/Tor flags.
+      GEOIP_ASN_DB_PATH: ${GEOIP_ASN_DB_PATH:-/geoip/GeoLite2-ASN.mmdb}
+      GEOIP_ANONYMOUS_DB_PATH: ${GEOIP_ANONYMOUS_DB_PATH:-/geoip/GeoIP2-Anonymous-IP.mmdb}
       # Rate limiting (Redis-backed; no-op without Redis).
       RATE_LIMIT_IP_MAX: ${RATE_LIMIT_IP_MAX:-300}
       RATE_LIMIT_TENANT_MAX: ${RATE_LIMIT_TENANT_MAX:-600}

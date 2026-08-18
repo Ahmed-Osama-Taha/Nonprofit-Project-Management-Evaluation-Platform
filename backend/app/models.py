@@ -341,6 +341,9 @@ class Visitor(Base):
     # Best-effort location + IP (IP only stored when session_store_ip is on).
     ip: Mapped[str | None] = mapped_column(String(64))
     location: Mapped[str | None] = mapped_column(String(128))
+    # IP intelligence: local|tor|vpn|proxy|hosting|residential|unknown, + ISP/AS.
+    network_type: Mapped[str | None] = mapped_column(String(16))
+    isp: Mapped[str | None] = mapped_column(String(128))
 
     consent: Mapped[str] = mapped_column(String(16), default="none")  # none|granted|denied
     event_count: Mapped[int] = mapped_column(Integer, default=0)

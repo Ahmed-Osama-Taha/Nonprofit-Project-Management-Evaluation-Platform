@@ -36,6 +36,8 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
     ("documents", "deleted_at", "TIMESTAMPTZ"),
     ("visitors", "device", "VARCHAR(128)"),
     ("visitors", "is_bot", "BOOLEAN NOT NULL DEFAULT false"),
+    ("visitors", "network_type", "VARCHAR(16)"),
+    ("visitors", "isp", "VARCHAR(128)"),
 ]
 
 

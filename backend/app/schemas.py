@@ -148,6 +148,8 @@ class VisitorOut(BaseModel):
     platform: str | None = None
     location: str | None = None
     ip: str | None = None
+    network_type: str | None = None
+    isp: str | None = None
     first_referrer: str | None = None
     utm: dict | None = None
     consent: str = "none"

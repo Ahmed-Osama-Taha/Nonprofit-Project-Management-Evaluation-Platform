@@ -160,6 +160,8 @@ def _visitor_out(v: Visitor) -> VisitorOut:
         user_email=v.user.email if v.user else None,
         device=v.device,
         is_bot=v.is_bot,
+        network_type=v.network_type,
+        isp=v.isp,
         user_agent=v.user_agent,
         timezone=v.timezone,
         screen=v.screen,

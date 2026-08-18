@@ -116,6 +116,8 @@ export interface VisitorSummary {
   user_email?: string | null;
   device?: string | null;
   is_bot?: boolean;
+  network_type?: string | null;
+  isp?: string | null;
   user_agent?: string | null;
   timezone?: string | null;
   screen?: string | null;

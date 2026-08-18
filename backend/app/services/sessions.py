@@ -112,6 +112,108 @@ def _reader():
     return _READER
 
 
+# Cached readers for the ASN + Anonymous-IP databases (offline, opened once).
+_ASN: object | None = None
+_ANON: object | None = None
+
+# AS-organisation keywords that mark a hosting/datacenter/VPN network (i.e. NOT a
+# residential ISP). A consumer signing in from one of these is suspicious.
+_HOSTING_KW = (
+    "amazon", "aws", "google", "microsoft", "azure", "oracle", "alibaba", "tencent",
+    "digitalocean", "ovh", "hetzner", "linode", "vultr", "cloudflare", "akamai",
+    "leaseweb", "datacamp", "m247", "choopa", "contabo", "scaleway", "upcloud",
+    "hosting", "datacenter", "data center", "server", "colo", "cloud",
+    "nordvpn", "expressvpn", "mullvad", "surfshark", "cyberghost", "ipvanish",
+    "private internet", "protonvpn", "proton ", "pia ", "vpn", "tor ",
+)
+
+
+def _asn_reader():
+    global _ASN
+    if _ASN is not None:
+        return _ASN or None
+    path = getattr(settings, "geoip_asn_db_path", "") or ""
+    if not path:
+        _ASN = False
+        return None
+    try:
+        import geoip2.database  # type: ignore
+
+        _ASN = geoip2.database.Reader(path)
+    except Exception:  # noqa: BLE001
+        _ASN = False
+        return None
+    return _ASN
+
+
+def _anon_reader():
+    global _ANON
+    if _ANON is not None:
+        return _ANON or None
+    path = getattr(settings, "geoip_anonymous_db_path", "") or ""
+    if not path:
+        _ANON = False
+        return None
+    try:
+        import geoip2.database  # type: ignore
+
+        _ANON = geoip2.database.Reader(path)
+    except Exception:  # noqa: BLE001
+        _ANON = False
+        return None
+    return _ANON
+
+
+def classify_network(ip: str | None) -> tuple[str | None, str | None]:
+    """Return ``(network_type, isp)`` — fully offline.
+
+    network_type ∈ {local, tor, vpn, proxy, hosting, residential, unknown}.
+    Uses the Anonymous-IP DB for precise flags when present, else infers
+    hosting/VPN vs residential from the ASN DB's AS-organisation name.
+    """
+    if not ip:
+        return None, None
+    try:
+        addr = ipaddress.ip_address(ip)
+        if addr.is_loopback or addr.is_private:
+            return "local", "Local network"
+    except ValueError:
+        return None, None
+
+    # AS organisation / ISP name (free ASN DB).
+    isp = None
+    r = _asn_reader()
+    if r:
+        try:
+            isp = r.asn(ip).autonomous_system_organization
+        except Exception:  # noqa: BLE001
+            isp = None
+
+    # Precise anonymiser flags (optional paid DB).
+    a = _anon_reader()
+    if a:
+        try:
+            rec = a.anonymous_ip(ip)
+            if getattr(rec, "is_tor_exit_node", False):
+                return "tor", isp
+            if getattr(rec, "is_anonymous_vpn", False):
+                return "vpn", isp
+            if getattr(rec, "is_public_proxy", False) or getattr(rec, "is_residential_proxy", False):
+                return "proxy", isp
+            if getattr(rec, "is_hosting_provider", False):
+                return "hosting", isp
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Heuristic from the ISP/AS org name.
+    if isp:
+        low = isp.lower()
+        if any(k in low for k in _HOSTING_KW):
+            return "hosting", isp
+        return "residential", isp
+    return "unknown", isp
+
+
 def lookup_location(ip: str | None) -> str | None:
     """Resolve an IP to a coarse 'City, Region, CC' label — fully offline.
 

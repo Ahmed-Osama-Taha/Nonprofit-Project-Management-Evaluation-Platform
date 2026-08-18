@@ -27,9 +27,19 @@ function describeSignal(code: string, t: (k: string) => string): { text: string;
       return { text: t("sig.bot"), severity: "medium" };
     case "many_devices":
       return { text: `${a} ${t("sig.manydev")}`, severity: "medium" };
+    case "anon_network":
+      return { text: `${t("sig.anon")}: ${netLabel(a, t)}`, severity: "high" };
     default:
       return { text: t("sig.none"), severity: "info" };
   }
+}
+
+const NET_ICON: Record<string, string> = {
+  local: "🏠", residential: "🏠", hosting: "🖥️", vpn: "🛡️", proxy: "🔀", tor: "🧅",
+};
+function netLabel(nt: string | null | undefined, t: (k: string) => string) {
+  if (!nt) return "—";
+  return `${NET_ICON[nt] || ""} ${t(`net.${nt}`)}`.trim();
 }
 
 function dt(v?: string | null) {
@@ -147,6 +157,11 @@ export function VisitorProfile({
               <dd>{dt(p.last_seen)}</dd>
               <dt>{t("admin.location")}</dt>
               <dd>{p.location || "—"}</dd>
+              <dt>{t("prof.connection")}</dt>
+              <dd>
+                {netLabel(p.devices[0]?.network_type, t)}
+                {p.devices[0]?.isp ? <span className="muted"> · {p.devices[0].isp}</span> : null}
+              </dd>
               <dt>{t("prof.timezone")}</dt>
               <dd>{p.devices[0]?.timezone || "—"}</dd>
               <dt>{t("prof.referrer")}</dt>
@@ -161,10 +176,16 @@ export function VisitorProfile({
                   <span>
                     {d.device || d.platform || "—"}
                     {d.is_bot && <span className="badge badge-rejected" style={{ marginInlineStart: 6 }}>bot</span>}
+                    {["vpn", "proxy", "tor", "hosting"].includes(d.network_type || "") && (
+                      <span className="badge badge-rejected" style={{ marginInlineStart: 6 }}>
+                        {netLabel(d.network_type, t)}
+                      </span>
+                    )}
                   </span>
                   <span className="small muted">
                     {d.location || "—"}
                     {d.timezone ? ` · 🕓 ${d.timezone}` : ""} · {dt(d.last_seen)}
+                    {d.isp ? ` · ${d.isp}` : ""}
                   </span>
                 </div>
               ))}

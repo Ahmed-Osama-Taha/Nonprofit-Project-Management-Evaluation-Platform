@@ -65,6 +65,7 @@ def _collect(
 ) -> CollectResult:
     ip = session_service.client_ip(request)
     location = session_service.lookup_location(ip)
+    network_type, isp = session_service.classify_network(ip)
     stored_ip = ip if settings.session_store_ip else None
 
     visitor = db.scalar(select(Visitor).where(Visitor.visitor_key == p.visitor_key))
@@ -110,6 +111,8 @@ def _collect(
         visitor.user_id = user.id
     visitor.ip = stored_ip
     visitor.location = location
+    visitor.network_type = network_type
+    visitor.isp = isp
     visitor.last_seen = datetime.now(timezone.utc)
     visitor.event_count = (visitor.event_count or 0) + 1
     db.flush()  # ensure visitor.id
