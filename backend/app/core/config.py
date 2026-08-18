@@ -30,16 +30,12 @@ class Settings(BaseSettings):
     refresh_cookie_name: str = "ath_refresh"
     csrf_cookie_name: str = "ath_csrf"
 
-    # Session activity log — geolocation of login IPs. A coarse location is
-    # always derived best-effort and stored; the raw IP is only stored when
-    # `session_store_ip` is on (see below).
-    #   1) Local MaxMind GeoLite2 City DB (offline, resolves IPv4 + IPv6).
+    # Session activity log — geolocation of login IPs is FULLY OFFLINE: a local
+    # MaxMind-format City DB (.mmdb) mounted into the container, resolved
+    # in-process. The backend makes NO outbound network calls for geolocation
+    # (required for a no-egress / security-compliant environment). Blank or a
+    # missing file -> IPs are classified only as "Local network" vs unknown.
     geoip_db_path: str = ""
-    #   2) Optional HTTPS geo API fallback (no key). Off by default so the
-    #      default build makes no external calls; enable on a deployment that is
-    #      allowed egress. `{ip}` is substituted into the URL.
-    geoip_api_enabled: bool = False
-    geoip_api_url: str = "https://ipapi.co/{ip}/json/"
     # Privacy: when False (the default), login IPs are NOT stored at all — only
     # device, coarse location, and timestamps. Recommended for a public shared
     # demo so one demo user can't see another's IP. Set True on a private,

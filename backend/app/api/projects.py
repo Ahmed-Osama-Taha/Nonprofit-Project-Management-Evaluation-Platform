@@ -14,7 +14,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user, require_roles
@@ -24,6 +24,7 @@ from app.models import (
     AIAnalysis,
     AIAnalysisStatus,
     Document,
+    DocumentChunk,
     Project,
     ProjectStatus,
     User,
@@ -58,7 +59,9 @@ def _load_project(db: Session, project_id: str) -> Project:
         .options(
             selectinload(Project.organization),
             selectinload(Project.owner).selectinload(User.organization),
-            selectinload(Project.documents),
+            # Only non-deleted documents are surfaced; soft-deleted ones stay in
+            # the DB + object storage for audit but never appear in responses.
+            selectinload(Project.documents.and_(Document.deleted_at.is_(None))),
             selectinload(Project.reviews),
             selectinload(Project.ai_analysis),
         )
@@ -295,7 +298,7 @@ def download_document(
     project = _load_project(db, project_id)
     _authorize_view(project, user)
     doc = db.get(Document, document_id)
-    if not doc or doc.project_id != project_id:
+    if not doc or doc.project_id != project_id or doc.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Document not found")
     # Force download-as-attachment with a safe content type so the browser never
     # renders/executes the file inline.
@@ -313,18 +316,26 @@ def delete_document(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
-    """Remove a document — only the owning org, and only while editable."""
+    """Remove a document — only the owning org, and only while editable.
+
+    This is a SOFT delete: the document is hidden from the org and dropped from
+    AI analysis, but the stored object is retained (never deleted from object
+    storage) so the application record stays intact and auditable. The only
+    thing physically removed is the derived RAG index (document_chunks), which
+    is regenerable and is not evidence."""
     project = _load_project(db, project_id)
     _authorize_edit(project, user)
     doc = db.get(Document, document_id)
-    if not doc or doc.project_id != project_id:
+    if not doc or doc.project_id != project_id or doc.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Document not found")
-    storage.delete_object(doc.storage_key)
-    filename = doc.filename
-    db.delete(doc)
+
+    doc.deleted_at = datetime.now(timezone.utc)
+    # Drop the derived embeddings so a removed doc no longer influences analysis.
+    db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc.id))
     record_audit(
         db, actor=user, action="document.delete", entity_type="document",
-        entity_id=document_id, detail={"project_id": project_id, "filename": filename},
+        entity_id=document_id,
+        detail={"project_id": project_id, "filename": doc.filename, "soft": True},
     )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
