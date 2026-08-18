@@ -194,10 +194,36 @@ class InsightsOut(BaseModel):
     text: str
 
 
+class ProfileOut(BaseModel):
+    """A consolidated 360° identity profile: the person (or anonymous visitor)
+    with all their devices, login sessions, and activity stitched together,
+    plus a rule-based risk assessment."""
+
+    visitor_id: str
+    is_identified: bool = False
+    user_id: str | None = None
+    user_email: str | None = None
+    user_name: str | None = None
+    role: str | None = None
+    organization: str | None = None
+    first_seen: datetime
+    last_seen: datetime
+    consent: str = "none"
+    location: str | None = None
+    first_referrer: str | None = None
+    utm: dict | None = None
+    risk_level: str = "low"          # low | medium | high
+    risk_signals: list[str] = []
+    devices: list["VisitorOut"] = []
+    sessions: list["AdminSessionOut"] = []
+    events: list["VisitorEventOut"] = []
+
+
 class AdminSessionOut(BaseModel):
     """Admin login-activity row — includes who and (admin-only) the IP."""
 
     id: str
+    user_id: str | None = None
     user_email: str | None = None
     user_name: str | None = None
     device: str | None = None

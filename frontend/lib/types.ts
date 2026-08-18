@@ -146,8 +146,30 @@ export interface VisitorDetail extends VisitorSummary {
   events: VisitorEventInfo[];
 }
 
+export interface Profile {
+  visitor_id: string;
+  is_identified: boolean;
+  user_id?: string | null;
+  user_email?: string | null;
+  user_name?: string | null;
+  role?: string | null;
+  organization?: string | null;
+  first_seen: string;
+  last_seen: string;
+  consent: string;
+  location?: string | null;
+  first_referrer?: string | null;
+  utm?: Record<string, unknown> | null;
+  risk_level: string;
+  risk_signals: string[];
+  devices: VisitorSummary[];
+  sessions: AdminSession[];
+  events: VisitorEventInfo[];
+}
+
 export interface AdminSession {
   id: string;
+  user_id?: string | null;
   user_email?: string | null;
   user_name?: string | null;
   device?: string | null;

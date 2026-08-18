@@ -10,7 +10,7 @@ from app.api.deps import require_roles
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import hash_password
-from app.services import ai
+from app.services import ai, risk
 from app.models import (
     AuditLog,
     Organization,
@@ -30,6 +30,7 @@ from app.schemas import (
     InsightsOut,
     LabelValue,
     OrganizationOut,
+    ProfileOut,
     RegisterRequest,
     UserOut,
     VisitorDetailOut,
@@ -115,22 +116,7 @@ def list_login_activity(
     )
     if active_only:
         stmt = stmt.where(UserSession.revoked_at.is_(None))
-    out: list[AdminSessionOut] = []
-    for s in db.scalars(stmt).all():
-        out.append(
-            AdminSessionOut(
-                id=s.id,
-                user_email=s.user.email if s.user else None,
-                user_name=s.user.full_name if s.user else None,
-                device=s.device,
-                ip=s.ip,
-                location=s.location,
-                created_at=s.created_at,
-                last_seen_at=s.last_seen_at,
-                revoked=s.revoked_at is not None,
-            )
-        )
-    return out
+    return [_session_out(s) for s in db.scalars(stmt).all()]
 
 
 @router.delete("/sessions/{session_id}", status_code=204)
@@ -351,6 +337,135 @@ def ai_insights(
     record_audit(db, actor=admin, action="admin.insights", entity_type="analytics")
     db.commit()
     return InsightsOut(text=text)
+
+
+# ── 360° identity profile (enterprise drill-down) ────────────
+def _session_out(s: UserSession) -> AdminSessionOut:
+    return AdminSessionOut(
+        id=s.id,
+        user_id=s.user_id,
+        user_email=s.user.email if s.user else None,
+        user_name=s.user.full_name if s.user else None,
+        device=s.device,
+        ip=s.ip,
+        location=s.location,
+        created_at=s.created_at,
+        last_seen_at=s.last_seen_at,
+        revoked=s.revoked_at is not None,
+    )
+
+
+def _build_profile(db: Session, seed: Visitor | None, user: User | None) -> ProfileOut:
+    """Stitch a 360° identity from a seed visitor and/or a resolved user."""
+    from datetime import datetime, timezone
+
+    if user is not None:
+        devices = list(
+            db.scalars(
+                select(Visitor)
+                .options(selectinload(Visitor.user))
+                .where(Visitor.user_id == user.id)
+                .order_by(Visitor.last_seen.desc())
+            ).all()
+        )
+        sessions = list(
+            db.scalars(
+                select(UserSession)
+                .options(selectinload(UserSession.user))
+                .where(UserSession.user_id == user.id)
+                .order_by(UserSession.last_seen_at.desc())
+            ).all()
+        )
+    else:
+        devices, sessions = ([seed] if seed else []), []
+
+    device_ids = [d.id for d in devices]
+    events = (
+        list(
+            db.scalars(
+                select(VisitorEvent)
+                .where(VisitorEvent.visitor_id.in_(device_ids))
+                .order_by(VisitorEvent.created_at.desc())
+                .limit(100)
+            ).all()
+        )
+        if device_ids
+        else []
+    )
+
+    level, risk_signals = risk.compute_risk(devices, sessions, events)
+    now = datetime.now(timezone.utc)
+    seen = [d.first_seen for d in devices] + [s.created_at for s in sessions]
+    last = [d.last_seen for d in devices] + [s.last_seen_at for s in sessions]
+    return ProfileOut(
+        visitor_id=seed.id if seed else (devices[0].id if devices else ""),
+        is_identified=user is not None,
+        user_id=user.id if user else None,
+        user_email=user.email if user else None,
+        user_name=user.full_name if user else None,
+        role=user.role.value if user else None,
+        organization=(user.organization.name if user and user.organization else None),
+        first_seen=min(seen, default=now),
+        last_seen=max(last, default=now),
+        consent=seed.consent if seed else "none",
+        location=seed.location if seed else (sessions[0].location if sessions else None),
+        first_referrer=seed.first_referrer if seed else None,
+        utm=seed.utm if seed else None,
+        risk_level=level,
+        risk_signals=risk_signals,
+        devices=[_visitor_out(d) for d in devices],
+        sessions=[_session_out(s) for s in sessions],
+        events=[VisitorEventOut.model_validate(e) for e in events],
+    )
+
+
+@router.get("/profile/{visitor_id}", response_model=ProfileOut)
+def identity_profile(
+    visitor_id: str, db: Session = Depends(get_db), _: User = AdminOnly
+) -> ProfileOut:
+    """Full identity for a visitor (drill-down from the Visitors tab)."""
+    v = db.scalar(
+        select(Visitor).options(selectinload(Visitor.user)).where(Visitor.id == visitor_id)
+    )
+    if not v:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return _build_profile(db, v, v.user)
+
+
+@router.get("/profile/user/{user_id}", response_model=ProfileOut)
+def identity_profile_for_user(
+    user_id: str, db: Session = Depends(get_db), _: User = AdminOnly
+) -> ProfileOut:
+    """Full identity for a user (drill-down from the Logins/Users tabs)."""
+    u = db.scalar(
+        select(User).options(selectinload(User.organization)).where(User.id == user_id)
+    )
+    if not u:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    seed = db.scalar(
+        select(Visitor).where(Visitor.user_id == user_id).order_by(Visitor.last_seen.desc())
+    )
+    return _build_profile(db, seed, u)
+
+
+@router.delete("/profile/{visitor_id}", status_code=204)
+def erase_identity(
+    visitor_id: str, db: Session = Depends(get_db), admin: User = AdminOnly
+) -> Response:
+    """DSAR erasure: delete all visitor/behaviour data for this identity (every
+    device + its events). Login/session and account records are kept."""
+    v = db.get(Visitor, visitor_id)
+    if not v:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    if v.user_id:
+        db.execute(delete(Visitor).where(Visitor.user_id == v.user_id))
+    else:
+        db.delete(v)
+    record_audit(db, actor=admin, action="admin.identity.erase",
+                 entity_type="visitor", entity_id=visitor_id,
+                 detail={"user_id": v.user_id})
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/visitors/{visitor_id}", status_code=204)

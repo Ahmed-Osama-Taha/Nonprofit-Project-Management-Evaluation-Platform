@@ -12,6 +12,7 @@ import type {
   VisitorSummary,
 } from "@/lib/types";
 import { RequireAuth, PageHead, BarList, Donut, dateStr } from "@/components/ui";
+import { VisitorProfile } from "@/components/admin/VisitorProfile";
 
 type AdminTab =
   | "overview"
@@ -32,6 +33,7 @@ function AdminInner() {
   const [insights, setInsights] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [showApiLog, setShowApiLog] = useState(false);
+  const [profile, setProfile] = useState<{ visitorId?: string; userId?: string } | null>(null);
   const [tab, setTab] = useState<AdminTab>("overview");
   const [form, setForm] = useState({ full_name: "", email: "", password: "" });
   const [msg, setMsg] = useState("");
@@ -247,7 +249,11 @@ function AdminInner() {
               </thead>
               <tbody>
                 {sessions.map((s) => (
-                  <tr key={s.id}>
+                  <tr
+                    key={s.id}
+                    className={s.user_id ? "clickable" : ""}
+                    onClick={() => s.user_id && setProfile({ userId: s.user_id })}
+                  >
                     <td className="small">
                       {s.user_name || "—"}
                       <div className="muted">{s.user_email}</div>
@@ -264,7 +270,10 @@ function AdminInner() {
                     <td style={{ textAlign: "end" }}>
                       <button
                         className="btn btn-danger btn-sm"
-                        onClick={() => deleteSession(s.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteSession(s.id);
+                        }}
                       >
                         {t("admin.delete")}
                       </button>
@@ -300,7 +309,11 @@ function AdminInner() {
               </thead>
               <tbody>
                 {visitors.map((v) => (
-                  <tr key={v.id}>
+                  <tr
+                    key={v.id}
+                    className="clickable"
+                    onClick={() => setProfile({ visitorId: v.id })}
+                  >
                     <td className="small muted" style={{ fontFamily: "monospace" }}>
                       {(v.fingerprint_hash || v.visitor_key).slice(0, 12)}…
                     </td>
@@ -320,7 +333,8 @@ function AdminInner() {
                     <td style={{ textAlign: "end" }}>
                       <button
                         className="btn btn-danger btn-sm"
-                        onClick={async () => {
+                        onClick={async (e) => {
+                          e.stopPropagation();
                           if (!window.confirm(t("admin.deleteConfirm"))) return;
                           await api.deleteVisitor(v.id);
                           setVisitors((s) => s.filter((x) => x.id !== v.id));
@@ -568,6 +582,15 @@ function AdminInner() {
             </div>
           )}
         </div>
+      )}
+
+      {profile && (
+        <VisitorProfile
+          visitorId={profile.visitorId}
+          userId={profile.userId}
+          onClose={() => setProfile(null)}
+          onErased={loadAll}
+        />
       )}
     </>
   );

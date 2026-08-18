@@ -16,6 +16,7 @@ import type {
   SessionInfo,
   User,
   Analytics,
+  Profile,
   VisitorSummary,
   VisitorDetail,
 } from "./types";
@@ -214,6 +215,12 @@ export const api = {
   visitor: (id: string) => request<VisitorDetail>(`/api/admin/visitors/${id}`),
   deleteVisitor: (id: string) =>
     request<void>(`/api/admin/visitors/${id}`, { method: "DELETE" }),
+  profile: (visitorId: string) =>
+    request<Profile>(`/api/admin/profile/${visitorId}`),
+  profileByUser: (userId: string) =>
+    request<Profile>(`/api/admin/profile/user/${userId}`),
+  eraseIdentity: (visitorId: string) =>
+    request<void>(`/api/admin/profile/${visitorId}`, { method: "DELETE" }),
   analytics: () => request<Analytics>("/api/admin/analytics"),
   insights: (language = "ar") =>
     request<{ text: string }>(`/api/admin/insights?language=${language}`, {
