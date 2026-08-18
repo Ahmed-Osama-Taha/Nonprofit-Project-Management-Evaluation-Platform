@@ -205,6 +205,12 @@ def _complete_json(system: str, user: str) -> dict:
     return _parse_json(text)
 
 
+def generate_text(system: str, user: str) -> str:
+    """Public single-shot text completion (e.g. admin AI insights). Raises
+    AINotConfigured when no LLM key is set."""
+    return _complete_text(system, user)
+
+
 def _complete_text(system: str, user: str) -> str:
     if settings.ai_provider == "anthropic":
         return _anthropic_text(system, user)

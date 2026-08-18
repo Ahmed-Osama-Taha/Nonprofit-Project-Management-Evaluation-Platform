@@ -29,6 +29,19 @@ from app.services import sessions as session_service
 
 router = APIRouter(prefix="/api", tags=["tracking"])
 
+_BOT_UA = ("bot", "crawler", "spider", "headless", "python", "curl", "wget", "scrapy", "phantom")
+
+
+def _looks_like_bot(ua: str, p: CollectIn) -> bool:
+    """Cheap bot heuristic: known bot UA tokens, or a client that produced no
+    fingerprint and no real browser signals (typical of headless/automation)."""
+    u = (ua or "").lower()
+    if any(tok in u for tok in _BOT_UA):
+        return True
+    if not p.fingerprint_hash and not (p.signals or {}).get("timezone"):
+        return True
+    return False
+
 
 @router.post("/collect", response_model=CollectResult)
 def collect(
@@ -81,6 +94,8 @@ def _collect(
         visitor.fingerprint_hash = p.fingerprint_hash
     if p.fingerprint_components:
         visitor.fingerprint_components = p.fingerprint_components
+    ua = request.headers.get("user-agent") or (p.signals or {}).get("userAgent") or ""
+    visitor.device = session_service.parse_device(ua)
     if p.signals:
         visitor.signals = p.signals
         visitor.user_agent = str(p.signals.get("userAgent") or visitor.user_agent or "")[:512] or None
@@ -88,6 +103,7 @@ def _collect(
         visitor.timezone = str(p.signals.get("timezone") or visitor.timezone or "")[:64] or None
         visitor.screen = str(p.signals.get("screen") or visitor.screen or "")[:32] or None
         visitor.platform = str(p.signals.get("platform") or visitor.platform or "")[:64] or None
+    visitor.is_bot = _looks_like_bot(ua, p)
     if p.consent:
         visitor.consent = p.consent
     if user:

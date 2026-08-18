@@ -5,22 +5,32 @@ import { api } from "@/lib/api";
 import { useI18n, statusLabel } from "@/lib/i18n";
 import type {
   AdminSession,
+  Analytics,
   AuditEntry,
   DashboardStats,
   User,
   VisitorSummary,
 } from "@/lib/types";
-import { RequireAuth, PageHead, dateStr } from "@/components/ui";
+import { RequireAuth, PageHead, BarList, Donut, dateStr } from "@/components/ui";
 
-type AdminTab = "overview" | "users" | "logins" | "visitors" | "audit";
+type AdminTab =
+  | "overview"
+  | "users"
+  | "logins"
+  | "visitors"
+  | "analytics"
+  | "audit";
 
 function AdminInner() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [sessions, setSessions] = useState<AdminSession[]>([]);
   const [visitors, setVisitors] = useState<VisitorSummary[]>([]);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [insights, setInsights] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
   const [showApiLog, setShowApiLog] = useState(false);
   const [tab, setTab] = useState<AdminTab>("overview");
   const [form, setForm] = useState({ full_name: "", email: "", password: "" });
@@ -33,6 +43,20 @@ function AdminInner() {
     api.audit(200, !showApiLog).then(setAudit).catch(() => {});
     api.adminSessions().then(setSessions).catch(() => {});
     api.visitors().then(setVisitors).catch(() => {});
+    api.analytics().then(setAnalytics).catch(() => {});
+  }
+
+  async function generateInsights() {
+    setAiBusy(true);
+    setInsights("");
+    try {
+      const r = await api.insights(lang);
+      setInsights(r.text);
+    } catch (e) {
+      setInsights(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setAiBusy(false);
+    }
   }
 
   useEffect(loadAll, [showApiLog]);
@@ -68,6 +92,7 @@ function AdminInner() {
     { key: "users", label: t("admin.users") },
     { key: "logins", label: t("admin.logins") },
     { key: "visitors", label: t("admin.visitors") },
+    { key: "analytics", label: t("an.title") },
     { key: "audit", label: t("admin.audit") },
   ];
 
@@ -281,7 +306,12 @@ function AdminInner() {
                     </td>
                     <td className="small">{v.user_email || <span className="muted">—</span>}</td>
                     <td className="small">
-                      {v.platform || "—"}
+                      {v.device || v.platform || "—"}
+                      {v.is_bot && (
+                        <span className="badge badge-rejected" style={{ marginInlineStart: 6 }}>
+                          bot
+                        </span>
+                      )}
                       <div className="muted">{v.timezone || ""}</div>
                     </td>
                     <td className="small">{v.location || "—"}</td>
@@ -305,6 +335,144 @@ function AdminInner() {
             </table>
           </div>
         </div>
+      )}
+
+      {tab === "analytics" && analytics && (
+        <>
+          <div className="grid-stats" style={{ marginBottom: 16 }}>
+            <div className="stat">
+              <div className="num">{analytics.total_visitors}</div>
+              <div className="lbl">{t("an.visitors")}</div>
+              <div className="sub">
+                {analytics.identified} {t("an.identified")} · {analytics.anonymous}{" "}
+                {t("an.anonymous")}
+              </div>
+            </div>
+            <div className="stat">
+              <div className="num">{analytics.pageviews}</div>
+              <div className="lbl">{t("an.pageviews")}</div>
+              <div className="sub">
+                {analytics.events} {t("an.events")}
+              </div>
+            </div>
+            <div className="stat">
+              <div className="num">{analytics.new_devices}</div>
+              <div className="lbl">{t("an.newDevices")}</div>
+            </div>
+            <div className="stat">
+              <div className="num">{analytics.bots}</div>
+              <div className="lbl">{t("an.bots")}</div>
+            </div>
+          </div>
+
+          {analytics.total_visitors === 0 ? (
+            <div className="card">
+              <p className="muted" style={{ margin: 0 }}>{t("an.empty")}</p>
+            </div>
+          ) : (
+            <>
+              {/* AI insights */}
+              <div className="card">
+                <div className="card-title flex-between">
+                  <div>
+                    <h3 style={{ margin: 0 }}>🤖 {t("an.aiInsights")}</h3>
+                    <span className="section-hint">{t("an.aiHint")}</span>
+                  </div>
+                  <button className="btn btn-sm" onClick={generateInsights} disabled={aiBusy}>
+                    {aiBusy ? t("an.generating") : t("an.generate")}
+                  </button>
+                </div>
+                {insights && (
+                  <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{insights}</div>
+                )}
+              </div>
+
+              <div className="row" style={{ marginBottom: 18 }}>
+                <div className="card">
+                  <div className="card-title"><h3>{t("an.overTime")}</h3></div>
+                  <BarList data={analytics.timeseries} color="var(--brand)" />
+                </div>
+                <div className="card">
+                  <div className="card-title"><h3>{t("an.byDevice")}</h3></div>
+                  {analytics.by_device.length ? (
+                    <Donut
+                      data={analytics.by_device.map((d) => ({ label: d.label, value: d.value }))}
+                      centerValue={String(analytics.total_visitors)}
+                      centerLabel={t("an.visitors")}
+                    />
+                  ) : (
+                    <p className="muted">{t("common.none")}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="row" style={{ marginBottom: 18 }}>
+                <div className="card">
+                  <div className="card-title"><h3>{t("an.byCountry")}</h3></div>
+                  <BarList data={analytics.by_country} />
+                </div>
+                <div className="card">
+                  <div className="card-title"><h3>{t("an.topPages")}</h3></div>
+                  <BarList data={analytics.top_pages} color="var(--gold)" />
+                </div>
+              </div>
+
+              <div className="row" style={{ marginBottom: 18 }}>
+                <div className="card">
+                  <div className="card-title"><h3>{t("an.topReferrers")}</h3></div>
+                  {analytics.top_referrers.length ? (
+                    <BarList data={analytics.top_referrers} />
+                  ) : (
+                    <p className="muted">{t("common.none")}</p>
+                  )}
+                </div>
+                <div className="card">
+                  <div className="card-title"><h3>{t("an.utm")}</h3></div>
+                  {analytics.utm_sources.length ? (
+                    <BarList data={analytics.utm_sources} color="var(--brand)" />
+                  ) : (
+                    <p className="muted">{t("common.none")}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Security alerts */}
+              <div className="card">
+                <div className="card-title"><h3>🛡️ {t("an.securityAlerts")}</h3></div>
+                {analytics.security_alerts.length === 0 ? (
+                  <p className="muted" style={{ margin: 0 }}>{t("an.noAlerts")}</p>
+                ) : (
+                  <div className="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{t("admin.when")}</th>
+                          <th>{t("admin.user")}</th>
+                          <th>{t("admin.location")}</th>
+                          <th>{t("admin.newDevice")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {analytics.security_alerts.map((s, i) => (
+                          <tr key={i}>
+                            <td className="small muted">{dateStr(s.when)}</td>
+                            <td className="small">{s.user || "—"}</td>
+                            <td className="small">{s.location || "—"}</td>
+                            <td>
+                              <span className="badge badge-changes_requested">
+                                {t("admin.newDevice")}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </>
       )}
 
       {tab === "audit" && (

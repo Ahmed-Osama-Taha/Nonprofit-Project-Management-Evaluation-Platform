@@ -140,6 +140,8 @@ class VisitorOut(BaseModel):
     visitor_key: str
     fingerprint_hash: str | None = None
     user_email: str | None = None
+    device: str | None = None
+    is_bot: bool = False
     user_agent: str | None = None
     timezone: str | None = None
     screen: str | None = None
@@ -168,6 +170,28 @@ class VisitorDetailOut(VisitorOut):
     fingerprint_components: dict | None = None
     signals: dict | None = None
     events: list[VisitorEventOut] = []
+
+
+class AnalyticsOut(BaseModel):
+    total_visitors: int = 0
+    identified: int = 0
+    anonymous: int = 0
+    bots: int = 0
+    new_devices: int = 0
+    pageviews: int = 0
+    events: int = 0
+    by_country: list["LabelValue"] = []
+    by_device: list["LabelValue"] = []
+    by_platform: list["LabelValue"] = []
+    top_pages: list["LabelValue"] = []
+    top_referrers: list["LabelValue"] = []
+    utm_sources: list["LabelValue"] = []
+    timeseries: list["LabelValue"] = []
+    security_alerts: list[dict] = []
+
+
+class InsightsOut(BaseModel):
+    text: str
 
 
 class AdminSessionOut(BaseModel):

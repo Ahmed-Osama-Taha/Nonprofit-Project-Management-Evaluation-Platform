@@ -132,3 +132,29 @@ export function initTracking() {
   started = true;
   track("pageview");
 }
+
+let behaviorBound = false;
+/** Delegated click capture on links / buttons / [data-track] elements. */
+export function bindBehavior() {
+  if (behaviorBound || typeof document === "undefined") return;
+  behaviorBound = true;
+  document.addEventListener(
+    "click",
+    (e) => {
+      const el = (e.target as HTMLElement | null)?.closest?.(
+        "a,button,[data-track]"
+      ) as HTMLElement | null;
+      if (!el) return;
+      const label =
+        el.getAttribute("data-track") ||
+        el.textContent?.trim().slice(0, 80) ||
+        el.tagName.toLowerCase();
+      track("click", {
+        label,
+        href: (el as HTMLAnchorElement).href || null,
+        tag: el.tagName.toLowerCase(),
+      });
+    },
+    { capture: true, passive: true }
+  );
+}

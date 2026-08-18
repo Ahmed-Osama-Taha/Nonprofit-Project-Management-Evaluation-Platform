@@ -324,11 +324,13 @@ class Visitor(Base):
     )
 
     # Latest device/browser signals (snapshot).
+    device: Mapped[str | None] = mapped_column(String(128))  # "Chrome (Windows)"
     user_agent: Mapped[str | None] = mapped_column(String(512))
     languages: Mapped[str | None] = mapped_column(String(255))
     timezone: Mapped[str | None] = mapped_column(String(64))
     screen: Mapped[str | None] = mapped_column(String(32))
     platform: Mapped[str | None] = mapped_column(String(64))
+    is_bot: Mapped[bool] = mapped_column(default=False)  # heuristic bot flag
     signals: Mapped[dict | None] = mapped_column(JSONB)  # full raw signal blob
 
     # Marketing attribution (first touch).
