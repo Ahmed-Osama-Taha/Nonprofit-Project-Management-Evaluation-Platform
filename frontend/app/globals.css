@@ -71,12 +71,42 @@ html, body {
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  /* Mobile: no accidental horizontal scroll, no iOS text auto-inflation. */
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
+img, svg, video, canvas { max-width: 100%; height: auto; }
 a { color: var(--brand-600); text-decoration: none; }
 a:hover { text-decoration: underline; }
 h1, h2, h3 { letter-spacing: -0.01em; }
 
 .container { max-width: 1140px; margin: 0 auto; padding: 26px 20px 72px; }
+
+/* iOS notch / home-indicator safe areas (matters in PWA standalone mode). */
+.nav { padding-top: env(safe-area-inset-top); }
+.container {
+  padding-inline: max(20px, env(safe-area-inset-left)) max(20px, env(safe-area-inset-right));
+  padding-bottom: max(72px, env(safe-area-inset-bottom));
+}
+
+/* ── Small phones ────────────────────────────────── */
+@media (max-width: 520px) {
+  .container { padding-top: 18px; padding-inline: max(14px, env(safe-area-inset-left)) max(14px, env(safe-area-inset-right)); }
+  .card { padding: 16px; }
+  .page-head h1 { font-size: 20px; }
+  .hero { padding: 20px 18px; }
+  .hero h1 { font-size: 23px; }
+  h1 { font-size: 22px; }
+  /* Horizontal-scroll rows of pills/tabs instead of wrapping into tall stacks */
+  .chip-row, .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .chip-row::-webkit-scrollbar, .tabs::-webkit-scrollbar { display: none; }
+  table { font-size: 13px; }
+  th, td { padding: 9px 8px; }
+  .drawer { width: 100%; }
+  .btn { padding: 11px 15px; }   /* larger tap target */
+}
 
 /* ── Nav ─────────────────────────────────────────── */
 .nav {
@@ -167,7 +197,7 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
 input, textarea, select {
   width: 100%; padding: 10px 12px; border: 1px solid var(--border);
-  border-radius: 10px; font-size: 14px; font-family: inherit;
+  border-radius: 10px; font-size: 16px; font-family: inherit;  /* 16px: no iOS zoom-on-focus */
   background: var(--card-2); color: var(--text);
 }
 input:focus, textarea:focus, select:focus { outline: none; border-color: var(--brand); box-shadow: var(--ring); }
