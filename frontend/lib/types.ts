@@ -160,6 +160,9 @@ export interface Profile {
   last_seen: string;
   consent: string;
   location?: string | null;
+  timezone?: string | null;
+  network_type?: string | null;
+  isp?: string | null;
   first_referrer?: string | null;
   utm?: Record<string, unknown> | null;
   risk_level: string;

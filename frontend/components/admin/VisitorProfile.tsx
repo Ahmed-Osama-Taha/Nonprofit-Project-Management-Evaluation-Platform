@@ -159,11 +159,11 @@ export function VisitorProfile({
               <dd>{p.location || "—"}</dd>
               <dt>{t("prof.connection")}</dt>
               <dd>
-                {netLabel(p.devices[0]?.network_type, t)}
-                {p.devices[0]?.isp ? <span className="muted"> · {p.devices[0].isp}</span> : null}
+                {netLabel(p.network_type, t)}
+                {p.isp ? <span className="muted"> · {p.isp}</span> : null}
               </dd>
               <dt>{t("prof.timezone")}</dt>
-              <dd>{p.devices[0]?.timezone || "—"}</dd>
+              <dd>{p.timezone || "—"}</dd>
               <dt>{t("prof.referrer")}</dt>
               <dd className="small">{p.first_referrer || "—"}</dd>
             </dl>
