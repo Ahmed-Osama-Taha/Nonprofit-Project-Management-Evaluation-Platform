@@ -116,6 +116,60 @@ class SessionOut(ORMModel):
     current: bool = False
 
 
+# ── Visitor intelligence ─────────────────────────────────────
+class CollectIn(BaseModel):
+    visitor_key: str
+    fingerprint_hash: str | None = None
+    fingerprint_components: dict | None = None
+    signals: dict | None = None
+    type: str = "pageview"          # pageview | click | identify | signal
+    url: str | None = None
+    referrer: str | None = None
+    utm: dict | None = None
+    payload: dict | None = None
+    consent: str | None = None      # none | granted | denied
+
+
+class CollectResult(BaseModel):
+    visitor_id: str
+    new_device: bool = False
+
+
+class VisitorOut(BaseModel):
+    id: str
+    visitor_key: str
+    fingerprint_hash: str | None = None
+    user_email: str | None = None
+    user_agent: str | None = None
+    timezone: str | None = None
+    screen: str | None = None
+    platform: str | None = None
+    location: str | None = None
+    ip: str | None = None
+    first_referrer: str | None = None
+    utm: dict | None = None
+    consent: str = "none"
+    event_count: int = 0
+    first_seen: datetime
+    last_seen: datetime
+
+
+class VisitorEventOut(ORMModel):
+    id: str
+    type: str
+    url: str | None = None
+    referrer: str | None = None
+    location: str | None = None
+    new_device: bool = False
+    created_at: datetime
+
+
+class VisitorDetailOut(VisitorOut):
+    fingerprint_components: dict | None = None
+    signals: dict | None = None
+    events: list[VisitorEventOut] = []
+
+
 class AdminSessionOut(BaseModel):
     """Admin login-activity row — includes who and (admin-only) the IP."""
 

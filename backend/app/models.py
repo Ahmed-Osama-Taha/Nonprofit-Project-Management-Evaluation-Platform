@@ -301,6 +301,81 @@ class Review(Base, TimestampMixin):
     reviewer: Mapped[User] = relationship()
 
 
+class Visitor(Base):
+    """A tracked visitor (device/browser), identified by a first-party key and a
+    device fingerprint. Anonymous until a login links it to a User.
+
+    NOTE: analytics/marketing USE of this data is gated on consent (see
+    ``consent``); collection during development is enabled by ``tracking_enabled``.
+    Security/audit use runs under legitimate interest.
+    """
+
+    __tablename__ = "visitors"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    # Stable first-party id minted by the client (cookie + localStorage mirror).
+    visitor_key: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    # Device fingerprint (FingerprintJS OSS hash) + its component breakdown.
+    fingerprint_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    fingerprint_components: Mapped[dict | None] = mapped_column(JSONB)
+    # Identity resolution: set when a logged-in user is seen on this device.
+    user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
+    # Latest device/browser signals (snapshot).
+    user_agent: Mapped[str | None] = mapped_column(String(512))
+    languages: Mapped[str | None] = mapped_column(String(255))
+    timezone: Mapped[str | None] = mapped_column(String(64))
+    screen: Mapped[str | None] = mapped_column(String(32))
+    platform: Mapped[str | None] = mapped_column(String(64))
+    signals: Mapped[dict | None] = mapped_column(JSONB)  # full raw signal blob
+
+    # Marketing attribution (first touch).
+    first_referrer: Mapped[str | None] = mapped_column(String(1024))
+    first_landing: Mapped[str | None] = mapped_column(String(1024))
+    utm: Mapped[dict | None] = mapped_column(JSONB)
+
+    # Best-effort location + IP (IP only stored when session_store_ip is on).
+    ip: Mapped[str | None] = mapped_column(String(64))
+    location: Mapped[str | None] = mapped_column(String(128))
+
+    consent: Mapped[str] = mapped_column(String(16), default="none")  # none|granted|denied
+    event_count: Mapped[int] = mapped_column(Integer, default=0)
+    first_seen: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_seen: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+    user: Mapped[User | None] = relationship()
+
+
+class VisitorEvent(Base):
+    """Append-only log of visitor signals/behaviour (pageviews, clicks, etc.)."""
+
+    __tablename__ = "visitor_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    visitor_id: Mapped[str] = mapped_column(
+        ForeignKey("visitors.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    type: Mapped[str] = mapped_column(String(32), nullable=False)  # pageview|click|identify|signal
+    url: Mapped[str | None] = mapped_column(String(1024))
+    referrer: Mapped[str | None] = mapped_column(String(1024))
+    payload: Mapped[dict | None] = mapped_column(JSONB)
+    ip: Mapped[str | None] = mapped_column(String(64))
+    location: Mapped[str | None] = mapped_column(String(128))
+    new_device: Mapped[bool] = mapped_column(default=False)  # security: unseen fp for this user
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
 class Payment(Base, TimestampMixin):
     """A single payment attempt (per-review charge or subscription checkout).
 

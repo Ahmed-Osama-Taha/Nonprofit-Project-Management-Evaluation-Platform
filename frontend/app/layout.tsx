@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { AuthProvider } from "@/lib/auth";
 import { I18nProvider } from "@/lib/i18n";
 import { NavBar } from "@/components/NavBar";
+import { Tracker } from "@/components/Tracker";
 
 export const metadata: Metadata = {
   title: "Athar · أثر — Nonprofit Project Evaluation",
@@ -20,6 +21,7 @@ export default function RootLayout({
       <body>
         <I18nProvider>
           <AuthProvider>
+            <Tracker />
             <NavBar />
             <main className="container">{children}</main>
           </AuthProvider>

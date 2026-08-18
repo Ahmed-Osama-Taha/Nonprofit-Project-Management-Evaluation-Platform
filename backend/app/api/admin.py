@@ -15,6 +15,8 @@ from app.models import (
     User,
     UserRole,
     UserSession,
+    Visitor,
+    VisitorEvent,
 )
 from app.schemas import (
     AdminSessionOut,
@@ -23,6 +25,9 @@ from app.schemas import (
     OrganizationOut,
     RegisterRequest,
     UserOut,
+    VisitorDetailOut,
+    VisitorEventOut,
+    VisitorOut,
 )
 from app.services.audit import record_audit
 
@@ -151,6 +156,81 @@ def list_audit(
         # Domain events have no HTTP method; API access rows do.
         stmt = stmt.where(AuditLog.method.is_(None))
     return list(db.scalars(stmt.limit(limit)).all())
+
+
+# ── Visitor intelligence ─────────────────────────────────────
+def _visitor_out(v: Visitor) -> VisitorOut:
+    return VisitorOut(
+        id=v.id,
+        visitor_key=v.visitor_key,
+        fingerprint_hash=v.fingerprint_hash,
+        user_email=v.user.email if v.user else None,
+        user_agent=v.user_agent,
+        timezone=v.timezone,
+        screen=v.screen,
+        platform=v.platform,
+        location=v.location,
+        ip=v.ip,
+        first_referrer=v.first_referrer,
+        utm=v.utm,
+        consent=v.consent,
+        event_count=v.event_count or 0,
+        first_seen=v.first_seen,
+        last_seen=v.last_seen,
+    )
+
+
+@router.get("/visitors", response_model=list[VisitorOut])
+def list_visitors(
+    db: Session = Depends(get_db),
+    _: User = AdminOnly,
+    limit: int = Query(default=200, le=1000),
+) -> list[VisitorOut]:
+    rows = db.scalars(
+        select(Visitor)
+        .options(selectinload(Visitor.user))
+        .order_by(Visitor.last_seen.desc())
+        .limit(limit)
+    ).all()
+    return [_visitor_out(v) for v in rows]
+
+
+@router.get("/visitors/{visitor_id}", response_model=VisitorDetailOut)
+def get_visitor(
+    visitor_id: str, db: Session = Depends(get_db), _: User = AdminOnly
+) -> VisitorDetailOut:
+    v = db.scalar(
+        select(Visitor).options(selectinload(Visitor.user)).where(Visitor.id == visitor_id)
+    )
+    if not v:
+        raise HTTPException(status_code=404, detail="Visitor not found")
+    events = db.scalars(
+        select(VisitorEvent)
+        .where(VisitorEvent.visitor_id == visitor_id)
+        .order_by(VisitorEvent.created_at.desc())
+        .limit(100)
+    ).all()
+    base = _visitor_out(v)
+    return VisitorDetailOut(
+        **base.model_dump(),
+        fingerprint_components=v.fingerprint_components,
+        signals=v.signals,
+        events=[VisitorEventOut.model_validate(e) for e in events],
+    )
+
+
+@router.delete("/visitors/{visitor_id}", status_code=204)
+def delete_visitor(
+    visitor_id: str, db: Session = Depends(get_db), admin: User = AdminOnly
+) -> Response:
+    v = db.get(Visitor, visitor_id)
+    if not v:
+        raise HTTPException(status_code=404, detail="Visitor not found")
+    db.delete(v)  # cascades to visitor_events
+    record_audit(db, actor=admin, action="admin.visitor.delete",
+                 entity_type="visitor", entity_id=visitor_id)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/audit", status_code=204)
