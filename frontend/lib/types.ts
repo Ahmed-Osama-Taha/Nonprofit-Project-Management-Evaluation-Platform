@@ -78,11 +78,44 @@ export interface SessionInfo {
   current: boolean;
 }
 
+export interface LabelValueT {
+  label: string;
+  value: number;
+}
+
+export interface SecurityAlert {
+  type: string;
+  when?: string | null;
+  user?: string | null;
+  location?: string | null;
+  url?: string | null;
+}
+
+export interface Analytics {
+  total_visitors: number;
+  identified: number;
+  anonymous: number;
+  bots: number;
+  new_devices: number;
+  pageviews: number;
+  events: number;
+  by_country: LabelValueT[];
+  by_device: LabelValueT[];
+  by_platform: LabelValueT[];
+  top_pages: LabelValueT[];
+  top_referrers: LabelValueT[];
+  utm_sources: LabelValueT[];
+  timeseries: LabelValueT[];
+  security_alerts: SecurityAlert[];
+}
+
 export interface VisitorSummary {
   id: string;
   visitor_key: string;
   fingerprint_hash?: string | null;
   user_email?: string | null;
+  device?: string | null;
+  is_bot?: boolean;
   user_agent?: string | null;
   timezone?: string | null;
   screen?: string | null;

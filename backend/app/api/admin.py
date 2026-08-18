@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, desc, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_roles
+from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import hash_password
+from app.services import ai
 from app.models import (
     AuditLog,
     Organization,
@@ -20,8 +24,11 @@ from app.models import (
 )
 from app.schemas import (
     AdminSessionOut,
+    AnalyticsOut,
     AuditLogOut,
     DashboardStats,
+    InsightsOut,
+    LabelValue,
     OrganizationOut,
     RegisterRequest,
     UserOut,
@@ -165,6 +172,8 @@ def _visitor_out(v: Visitor) -> VisitorOut:
         visitor_key=v.visitor_key,
         fingerprint_hash=v.fingerprint_hash,
         user_email=v.user.email if v.user else None,
+        device=v.device,
+        is_bot=v.is_bot,
         user_agent=v.user_agent,
         timezone=v.timezone,
         screen=v.screen,
@@ -217,6 +226,131 @@ def get_visitor(
         signals=v.signals,
         events=[VisitorEventOut.model_validate(e) for e in events],
     )
+
+
+# ── Visitor analytics + AI insights ──────────────────────────
+def _lv(rows) -> list[LabelValue]:
+    return [
+        LabelValue(label=(str(k) if k not in (None, "") else "—"), value=int(v))
+        for k, v in rows
+    ]
+
+
+def _build_analytics(db: Session) -> AnalyticsOut:
+    def count(model, *where) -> int:
+        stmt = select(func.count()).select_from(model)
+        for w in where:
+            stmt = stmt.where(w)
+        return db.scalar(stmt) or 0
+
+    def grouped(col, *where, limit=10) -> list[LabelValue]:
+        stmt = select(col, func.count()).group_by(col).order_by(desc(func.count())).limit(limit)
+        for w in where:
+            stmt = stmt.where(w)
+        return _lv(db.execute(stmt).all())
+
+    total = count(Visitor)
+    identified = count(Visitor, Visitor.user_id.is_not(None))
+    utm_src = func.jsonb_extract_path_text(Visitor.utm, "utm_source")
+    day = func.to_char(func.date_trunc("day", VisitorEvent.created_at), "MM-DD")
+
+    ts = _lv(
+        db.execute(
+            select(day, func.count()).group_by(day).order_by(day).limit(30)
+        ).all()
+    )
+
+    alerts: list[dict] = []
+    rows = db.execute(
+        select(
+            VisitorEvent.created_at, VisitorEvent.location, VisitorEvent.url, User.email
+        )
+        .join(User, VisitorEvent.user_id == User.id, isouter=True)
+        .where(VisitorEvent.new_device.is_(True))
+        .order_by(VisitorEvent.created_at.desc())
+        .limit(50)
+    ).all()
+    for created_at, location, url, email in rows:
+        alerts.append(
+            {
+                "type": "new_device",
+                "when": created_at.isoformat() if created_at else None,
+                "user": email,
+                "location": location,
+                "url": url,
+            }
+        )
+
+    return AnalyticsOut(
+        total_visitors=total,
+        identified=identified,
+        anonymous=total - identified,
+        bots=count(Visitor, Visitor.is_bot.is_(True)),
+        new_devices=count(VisitorEvent, VisitorEvent.new_device.is_(True)),
+        pageviews=count(VisitorEvent, VisitorEvent.type == "pageview"),
+        events=count(VisitorEvent),
+        by_country=grouped(Visitor.location, Visitor.location.is_not(None)),
+        by_device=grouped(Visitor.device, Visitor.device.is_not(None)),
+        by_platform=grouped(Visitor.platform, Visitor.platform.is_not(None)),
+        top_pages=grouped(VisitorEvent.url, VisitorEvent.type == "pageview"),
+        top_referrers=grouped(Visitor.first_referrer, Visitor.first_referrer.is_not(None)),
+        utm_sources=grouped(utm_src, Visitor.utm.is_not(None)),
+        timeseries=ts,
+        security_alerts=alerts,
+    )
+
+
+@router.get("/analytics", response_model=AnalyticsOut)
+def analytics(db: Session = Depends(get_db), _: User = AdminOnly) -> AnalyticsOut:
+    return _build_analytics(db)
+
+
+@router.post("/insights", response_model=InsightsOut)
+def ai_insights(
+    db: Session = Depends(get_db),
+    admin: User = AdminOnly,
+    language: str = Query(default="ar", description="ar | en"),
+) -> InsightsOut:
+    """AI narrative over the AGGREGATE (non-PII) analytics: security anomalies,
+    behaviour, and marketing recommendations."""
+    if not settings.ai_enabled:
+        raise HTTPException(status_code=503, detail="AI is not configured.")
+    a = _build_analytics(db)
+    payload = {
+        "totals": {
+            "visitors": a.total_visitors,
+            "identified": a.identified,
+            "anonymous": a.anonymous,
+            "bots": a.bots,
+            "pageviews": a.pageviews,
+            "events": a.events,
+            "new_device_logins": a.new_devices,
+        },
+        "by_country": [x.model_dump() for x in a.by_country],
+        "by_device": [x.model_dump() for x in a.by_device],
+        "top_pages": [x.model_dump() for x in a.top_pages],
+        "top_referrers": [x.model_dump() for x in a.top_referrers],
+        "utm_sources": [x.model_dump() for x in a.utm_sources],
+        "daily_events": [x.model_dump() for x in a.timeseries],
+        "security_alert_count": len(a.security_alerts),
+    }
+    lang = "Arabic" if language == "ar" else "English"
+    system = (
+        "You are a senior growth + security analyst for 'Athar', a nonprofit "
+        "grant-review platform in Saudi Arabia. You are given AGGREGATE, "
+        "non-personal visitor analytics. Produce concise, prioritized, "
+        f"actionable insights in {lang}. Use three short sections with headers: "
+        "1) Security & anomalies, 2) Visitor behaviour, 3) Marketing & growth. "
+        "Be specific, reference the numbers, and give concrete next actions. "
+        "If data is sparse, say so briefly. Do not invent data."
+    )
+    try:
+        text = ai.generate_text(system, json.dumps(payload, ensure_ascii=False))
+    except ai.AINotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    record_audit(db, actor=admin, action="admin.insights", entity_type="analytics")
+    db.commit()
+    return InsightsOut(text=text)
 
 
 @router.delete("/visitors/{visitor_id}", status_code=204)

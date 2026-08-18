@@ -34,6 +34,8 @@ def get_db() -> Generator[Session, None, None]:
 _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
     ("documents", "scan_status", "VARCHAR(32) NOT NULL DEFAULT 'skipped'"),
     ("documents", "deleted_at", "TIMESTAMPTZ"),
+    ("visitors", "device", "VARCHAR(128)"),
+    ("visitors", "is_bot", "BOOLEAN NOT NULL DEFAULT false"),
 ]
 
 

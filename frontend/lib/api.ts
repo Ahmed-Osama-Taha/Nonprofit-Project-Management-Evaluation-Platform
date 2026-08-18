@@ -15,6 +15,7 @@ import type {
   ReviewerDashboard,
   SessionInfo,
   User,
+  Analytics,
   VisitorSummary,
   VisitorDetail,
 } from "./types";
@@ -213,6 +214,11 @@ export const api = {
   visitor: (id: string) => request<VisitorDetail>(`/api/admin/visitors/${id}`),
   deleteVisitor: (id: string) =>
     request<void>(`/api/admin/visitors/${id}`, { method: "DELETE" }),
+  analytics: () => request<Analytics>("/api/admin/analytics"),
+  insights: (language = "ar") =>
+    request<{ text: string }>(`/api/admin/insights?language=${language}`, {
+      method: "POST",
+    }),
   createReviewer: (payload: {
     email: string;
     password: string;
