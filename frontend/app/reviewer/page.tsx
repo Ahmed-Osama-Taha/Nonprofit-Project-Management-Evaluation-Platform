@@ -2,19 +2,38 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Alert,
+  Card,
+  Col,
+  Empty,
+  Progress,
+  Row,
+  Space,
+  Spin,
+  Statistic,
+  Table,
+  Tag,
+  Typography,
+} from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { api } from "@/lib/api";
 import { useI18n, fmtMoney, statusLabel } from "@/lib/i18n";
 import type { ReviewerDashboard } from "@/lib/types";
-import {
-  RequireAuth,
-  StatusBadge,
-  PageHead,
-  BarList,
-  Donut,
-  money,
-} from "@/components/ui";
+import { RequireAuth, money } from "@/components/ui";
 
-const STATUS_COLORS: Record<string, string> = {
+const { Title, Text } = Typography;
+
+const STATUS_TAG: Record<string, string> = {
+  draft: "default",
+  submitted: "blue",
+  under_review: "gold",
+  changes_requested: "orange",
+  approved: "green",
+  rejected: "red",
+};
+
+const STATUS_STROKE: Record<string, string> = {
   draft: "#64748b",
   submitted: "#2563eb",
   under_review: "#d97706",
@@ -22,6 +41,32 @@ const STATUS_COLORS: Record<string, string> = {
   approved: "#16a34a",
   rejected: "#dc2626",
 };
+
+const REC_TAG: Record<string, { color: string; key: string }> = {
+  approve: { color: "green", key: "review.approve" },
+  request_changes: { color: "orange", key: "review.requestChanges" },
+  reject: { color: "red", key: "review.reject" },
+};
+
+function scoreColor(v: number) {
+  if (v >= 75) return "#16a34a";
+  if (v >= 55) return "#b88a2f";
+  if (v >= 40) return "#d97706";
+  return "#dc2626";
+}
+
+/** Labelled Progress bar row for a distribution. */
+function DistRow({ label, value, max, stroke }: { label: string; value: number; max: number; stroke?: string }) {
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+        <Text>{label}</Text>
+        <Text strong>{value}</Text>
+      </div>
+      <Progress percent={Math.round((value / Math.max(1, max)) * 100)} strokeColor={stroke} showInfo={false} />
+    </div>
+  );
+}
 
 function Dashboard() {
   const { t } = useI18n();
@@ -33,192 +78,184 @@ function Dashboard() {
     api.reviewerDashboard().then(setD).catch((e) => setErr(String(e.message)));
   }, []);
 
-  if (err) return <div className="error">{err}</div>;
+  if (err) return <Alert type="error" message={err} showIcon />;
   if (!d)
     return (
-      <div className="center-page">
-        <div className="spinner" />
+      <div style={{ textAlign: "center", padding: 64 }}>
+        <Spin size="large" />
       </div>
     );
 
-  const statusData = Object.entries(d.by_status).map(([k, v]) => ({
-    label: statusLabel(t, k),
-    value: v,
-    color: STATUS_COLORS[k],
-  }));
-  const catData = d.by_category.map((c) => ({
-    label: c.category,
-    value: c.count,
-    sub: `${c.count} · ${money(c.total_budget, d.currency)}`,
-  }));
+  const statusEntries = Object.entries(d.by_status);
+  const statusMax = Math.max(1, ...statusEntries.map(([, v]) => v));
+  const riskMax = Math.max(1, d.risk_distribution.high || 0, d.risk_distribution.medium || 0, d.risk_distribution.low || 0);
+  const scoreMax = Math.max(1, ...d.ai_score_buckets.map((b) => b.value));
+  const catMax = Math.max(1, ...d.by_category.map((c) => c.count));
+  const approvalPct = d.approval_rate == null ? null : Math.round(d.approval_rate * 100);
+
+  const queueCols: ColumnsType<ReviewerDashboard["queue"][number]> = [
+    {
+      title: t("proj.title"),
+      dataIndex: "title",
+      render: (v: string, r) => (
+        <div>
+          <div style={{ fontWeight: 600 }}>{v}</div>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {r.organization}
+          </Text>
+        </div>
+      ),
+    },
+    { title: t("proj.category"), dataIndex: "category", responsive: ["md"], render: (v: string) => v || t("common.none") },
+    {
+      title: t("status.submitted"),
+      dataIndex: "status",
+      render: (s: string) => <Tag color={STATUS_TAG[s]}>{statusLabel(t, s)}</Tag>,
+    },
+    {
+      title: t("proj.budget"),
+      dataIndex: "requested_budget",
+      responsive: ["sm"],
+      render: (v: number, r) => money(v, r.currency),
+    },
+    {
+      title: t("rev.aiScore"),
+      dataIndex: "ai_score",
+      render: (v: number | null, r) =>
+        v == null ? (
+          <Text type="secondary">—</Text>
+        ) : (
+          <Space direction="vertical" size={0}>
+            <Text strong style={{ color: scoreColor(Math.round(v)) }}>
+              {Math.round(v)}
+            </Text>
+            {r.risk_high > 0 && (
+              <Text style={{ color: "#dc2626", fontSize: 12 }}>
+                {r.risk_high} {t("rev.highRisks")}
+              </Text>
+            )}
+          </Space>
+        ),
+    },
+    {
+      title: t("ai.recommendation"),
+      dataIndex: "ai_recommendation",
+      responsive: ["lg"],
+      render: (rec: string | null) => {
+        const r = rec ? REC_TAG[rec] : undefined;
+        return r ? <Tag color={r.color}>{t(r.key)}</Tag> : <Text type="secondary">—</Text>;
+      },
+    },
+  ];
 
   return (
     <>
-      <PageHead title={t("rev.title")} sub={t("rev.subtitle")} />
+      <div style={{ marginBottom: 16 }}>
+        <Title level={3} style={{ margin: 0 }}>
+          {t("rev.title")}
+        </Title>
+        <Text type="secondary">{t("rev.subtitle")}</Text>
+      </div>
 
       {/* KPI tiles */}
-      <div className="grid-stats" style={{ marginBottom: 18 }}>
-        <div className="stat">
-          <div className="num">{d.total_projects}</div>
-          <div className="lbl">{t("rev.totalProjects")}</div>
-        </div>
-        <div className="stat">
-          <div className="num">{d.pending_review}</div>
-          <div className="lbl">{t("rev.pending")}</div>
-        </div>
-        <div className="stat">
-          <div className="num">
-            {d.approval_rate == null
-              ? "—"
-              : `${Math.round(d.approval_rate * 100)}%`}
-          </div>
-          <div className="lbl">{t("rev.approvalRate")}</div>
-          <div className="sub">
-            {d.decided} {t("rev.decided")}
-          </div>
-        </div>
-        <div className="stat">
-          <div className="num">{fmtMoney(t, d.total_requested_budget)}</div>
-          <div className="lbl">{t("rev.requestedBudget")}</div>
-          <div className="sub">
-            {fmtMoney(t, d.approved_budget)} · {t("rev.approvedBudget")}
-          </div>
-        </div>
-        <div className="stat">
-          <div className="num">{d.avg_ai_score ?? "—"}</div>
-          <div className="lbl">{t("rev.avgScore")}</div>
-        </div>
-      </div>
+      <Row gutter={[16, 16]} style={{ marginBottom: 18 }}>
+        <Col xs={12} md={8} lg={4}>
+          <Card>
+            <Statistic title={t("rev.totalProjects")} value={d.total_projects} />
+          </Card>
+        </Col>
+        <Col xs={12} md={8} lg={5}>
+          <Card>
+            <Statistic title={t("rev.pending")} value={d.pending_review} valueStyle={{ color: "#d97706" }} />
+          </Card>
+        </Col>
+        <Col xs={12} md={8} lg={5}>
+          <Card>
+            <Statistic
+              title={t("rev.approvalRate")}
+              value={approvalPct == null ? "—" : approvalPct}
+              suffix={approvalPct == null ? "" : "%"}
+              valueStyle={{ color: "#16a34a" }}
+            />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {d.decided} {t("rev.decided")}
+            </Text>
+          </Card>
+        </Col>
+        <Col xs={12} md={12} lg={6}>
+          <Card>
+            <Statistic title={t("rev.requestedBudget")} value={fmtMoney(t, d.total_requested_budget)} />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {fmtMoney(t, d.approved_budget)} · {t("rev.approvedBudget")}
+            </Text>
+          </Card>
+        </Col>
+        <Col xs={12} md={12} lg={4}>
+          <Card>
+            <Statistic title={t("rev.avgScore")} value={d.avg_ai_score ?? "—"} />
+          </Card>
+        </Col>
+      </Row>
 
-      {/* Charts row */}
-      <div className="row" style={{ marginBottom: 18 }}>
-        <div className="card">
-          <div className="card-title">
-            <h3>{t("rev.byStatus")}</h3>
-          </div>
-          <Donut
-            data={statusData}
-            centerValue={String(d.total_projects)}
-            centerLabel={t("rev.totalProjects")}
-          />
-        </div>
-        <div className="card">
-          <div className="card-title">
-            <h3>{t("rev.riskDist")}</h3>
-          </div>
-          <BarList
-            data={[
-              { label: t("ai.risks") + " · high", value: d.risk_distribution.high || 0 },
-              { label: t("ai.risks") + " · medium", value: d.risk_distribution.medium || 0 },
-              { label: t("ai.risks") + " · low", value: d.risk_distribution.low || 0 },
-            ]}
-          />
-          <div className="section-hint" style={{ marginTop: 12 }}>
-            {t("rev.aiScores")}
-          </div>
-          <BarList
-            data={d.ai_score_buckets.map((b) => ({
-              label: b.label,
-              value: b.value,
-            }))}
-            color="var(--gold)"
-          />
-        </div>
-      </div>
+      {/* Distributions */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 18 }}>
+        <Col xs={24} lg={12}>
+          <Card title={t("rev.byStatus")} style={{ height: "100%" }}>
+            {statusEntries.map(([k, v]) => (
+              <DistRow key={k} label={statusLabel(t, k)} value={v} max={statusMax} stroke={STATUS_STROKE[k]} />
+            ))}
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title={t("rev.riskDist")} style={{ height: "100%" }}>
+            <DistRow label={`${t("ai.risks")} · high`} value={d.risk_distribution.high || 0} max={riskMax} stroke="#dc2626" />
+            <DistRow label={`${t("ai.risks")} · medium`} value={d.risk_distribution.medium || 0} max={riskMax} stroke="#d97706" />
+            <DistRow label={`${t("ai.risks")} · low`} value={d.risk_distribution.low || 0} max={riskMax} stroke="#16a34a" />
+            <Text type="secondary" style={{ display: "block", margin: "12px 0 8px" }}>
+              {t("rev.aiScores")}
+            </Text>
+            {d.ai_score_buckets.map((b) => (
+              <DistRow key={b.label} label={b.label} value={b.value} max={scoreMax} stroke="#b88a2f" />
+            ))}
+          </Card>
+        </Col>
+      </Row>
 
-      <div className="card">
-        <div className="card-title">
-          <h3>{t("rev.byCategory")}</h3>
-        </div>
-        {catData.length ? (
-          <BarList data={catData} />
+      <Card title={t("rev.byCategory")} style={{ marginBottom: 18 }}>
+        {d.by_category.length ? (
+          d.by_category.map((c) => (
+            <DistRow
+              key={c.category}
+              label={`${c.category} · ${money(c.total_budget, d.currency)}`}
+              value={c.count}
+              max={catMax}
+            />
+          ))
         ) : (
-          <p className="muted">{t("common.none")}</p>
+          <Empty description={t("common.none")} image={Empty.PRESENTED_IMAGE_SIMPLE} />
         )}
-      </div>
+      </Card>
 
       {/* Review queue */}
-      <div className="card">
-        <div className="card-title">
-          <h3>{t("rev.queue")}</h3>
-          <span className="pill">{d.queue.length}</span>
-        </div>
-        {d.queue.length === 0 ? (
-          <p className="muted">{t("rev.queueEmpty")}</p>
-        ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("proj.title")}</th>
-                  <th>{t("proj.category")}</th>
-                  <th>{t("status.submitted")}</th>
-                  <th>{t("proj.budget")}</th>
-                  <th>{t("rev.aiScore")}</th>
-                  <th>{t("ai.recommendation")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.queue.map((q) => (
-                  <tr
-                    key={q.id}
-                    className="clickable"
-                    onClick={() => router.push(`/projects/${q.id}`)}
-                  >
-                    <td>
-                      <strong>{q.title}</strong>
-                      <div className="small muted">{q.organization}</div>
-                    </td>
-                    <td>{q.category || t("common.none")}</td>
-                    <td>
-                      <StatusBadge status={q.status} />
-                    </td>
-                    <td>{money(q.requested_budget, q.currency)}</td>
-                    <td>
-                      {q.ai_score == null ? (
-                        <span className="muted">—</span>
-                      ) : (
-                        <ScoreRingMini score={q.ai_score} />
-                      )}
-                      {q.risk_high > 0 && (
-                        <div className="small sev-high">
-                          {q.risk_high} {t("rev.highRisks")}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      {q.ai_recommendation ? (
-                        <span className={`rec-${q.ai_recommendation}`}>
-                          {t(`review.${camel(q.ai_recommendation)}`)}
-                        </span>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <Card
+        title={
+          <Space>
+            {t("rev.queue")}
+            <Tag>{d.queue.length}</Tag>
+          </Space>
+        }
+        styles={{ body: { padding: 0 } }}
+      >
+        <Table
+          rowKey="id"
+          columns={queueCols}
+          dataSource={d.queue}
+          onRow={(r) => ({ onClick: () => router.push(`/projects/${r.id}`), style: { cursor: "pointer" } })}
+          pagination={{ pageSize: 10, hideOnSinglePage: true }}
+          locale={{ emptyText: <Empty description={t("rev.queueEmpty")} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 24 }} /> }}
+        />
+      </Card>
     </>
-  );
-}
-
-function camel(rec: string): string {
-  return rec === "request_changes"
-    ? "requestChanges"
-    : rec === "approve"
-      ? "approve"
-      : "reject";
-}
-
-function ScoreRingMini({ score }: { score: number }) {
-  const v = Math.round(score);
-  const color = v >= 75 ? "#16a34a" : v >= 55 ? "#b88a2f" : v >= 40 ? "#d97706" : "#dc2626";
-  return (
-    <span style={{ fontWeight: 800, color }}>{v}</span>
   );
 }
 
