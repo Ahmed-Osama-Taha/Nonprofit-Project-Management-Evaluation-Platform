@@ -147,6 +147,8 @@ export function VisitorProfile({
               <dd>{dt(p.last_seen)}</dd>
               <dt>{t("admin.location")}</dt>
               <dd>{p.location || "—"}</dd>
+              <dt>{t("prof.timezone")}</dt>
+              <dd>{p.devices[0]?.timezone || "—"}</dd>
               <dt>{t("prof.referrer")}</dt>
               <dd className="small">{p.first_referrer || "—"}</dd>
             </dl>
@@ -160,7 +162,10 @@ export function VisitorProfile({
                     {d.device || d.platform || "—"}
                     {d.is_bot && <span className="badge badge-rejected" style={{ marginInlineStart: 6 }}>bot</span>}
                   </span>
-                  <span className="small muted">{d.location || "—"} · {dt(d.last_seen)}</span>
+                  <span className="small muted">
+                    {d.location || "—"}
+                    {d.timezone ? ` · 🕓 ${d.timezone}` : ""} · {dt(d.last_seen)}
+                  </span>
                 </div>
               ))}
             </div>
