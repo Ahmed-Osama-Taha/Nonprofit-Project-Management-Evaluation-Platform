@@ -6,6 +6,32 @@ import { useI18n } from "@/lib/i18n";
 import type { Profile } from "@/lib/types";
 import { Skeleton } from "@/components/ui";
 
+type Sev = "high" | "medium" | "info";
+
+/** Turn a raw risk-signal code into a human-readable, severity-tagged message. */
+function describeSignal(code: string, t: (k: string) => string): { text: string; severity: Sev } {
+  const [key, arg] = code.split(":");
+  const a = arg || "";
+  switch (key) {
+    case "impossible_travel":
+      return { text: `${t("sig.impossible")}: ${a.replace("->", " → ")}`, severity: "high" };
+    case "location_mismatch":
+      return { text: `${t("sig.mismatch")} (${a.replace("!=", " ≠ ")})`, severity: "high" };
+    case "multiple_countries":
+      return { text: `${t("sig.countries")}: ${a}`, severity: "high" };
+    case "high_velocity":
+      return { text: `${t("sig.velocity")}: ${a}`, severity: "medium" };
+    case "new_device_logins":
+      return { text: `${a} ${t("sig.newdev")}`, severity: "medium" };
+    case "bot_device":
+      return { text: t("sig.bot"), severity: "medium" };
+    case "many_devices":
+      return { text: `${a} ${t("sig.manydev")}`, severity: "medium" };
+    default:
+      return { text: t("sig.none"), severity: "info" };
+  }
+}
+
 function dt(v?: string | null) {
   if (!v) return "—";
   return new Date(v).toLocaleString(undefined, {
@@ -100,11 +126,17 @@ export function VisitorProfile({
               </div>
             </div>
 
-            {/* Risk signals */}
+            {/* Risk signals — readable, severity-coloured */}
             <div className="prof-signals">
-              {p.risk_signals.map((s) => (
-                <span key={s} className="chip">{s}</span>
-              ))}
+              {p.risk_signals.map((s) => {
+                const d = describeSignal(s, t);
+                return (
+                  <div key={s} className={`sig-row sig-${d.severity}`}>
+                    <span>{d.severity === "info" ? "✓" : "⚠️"}</span>
+                    <span>{d.text}</span>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Overview */}

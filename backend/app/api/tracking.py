@@ -127,5 +127,23 @@ def _collect(
             new_device=new_device,
         )
     )
+
+    # Real-time security notice: alert admins when a known user signs in from a
+    # device fingerprint never seen before (possible account takeover).
+    if new_device and user:
+        from app.models import User as UserModel
+        from app.models import UserRole
+        from app.services.audit import notify
+
+        where = location or visitor.device or "an unrecognised device"
+        for admin in db.scalars(
+            select(UserModel).where(UserModel.role == UserRole.admin)
+        ).all():
+            notify(
+                db,
+                user_id=admin.id,
+                message=f"⚠️ New-device sign-in: {user.email} from {where}",
+            )
+
     db.commit()
     return CollectResult(visitor_id=visitor.id, new_device=new_device)
