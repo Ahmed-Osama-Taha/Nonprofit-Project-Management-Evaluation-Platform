@@ -56,6 +56,8 @@ const EN: Dict = {
   "auth.country": "Country",
   "auth.website": "Website",
   "auth.haveAccount": "Already have an account?",
+  "auth.registerHint": "Self-registration creates an Organization account. Reviewer and admin accounts are provisioned internally.",
+  "auth.createAccount": "Create account",
   "auth.noAccount": "New organization?",
   "auth.demoAccounts": "Demo accounts",
   // Projects
@@ -373,6 +375,8 @@ const AR: Dict = {
   "auth.country": "الدولة",
   "auth.website": "الموقع الإلكتروني",
   "auth.haveAccount": "لديك حساب بالفعل؟",
+  "auth.registerHint": "التسجيل الذاتي يُنشئ حساب منظمة. حسابات المراجعين والمشرفين تُنشأ داخلياً.",
+  "auth.createAccount": "إنشاء حساب",
   "auth.noAccount": "منظمة جديدة؟",
   "auth.demoAccounts": "حسابات تجريبية",
   "proj.title": "عنوان المشروع",
