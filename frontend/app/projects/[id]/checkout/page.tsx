@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { Alert, Button, Card, Descriptions, Radio, Skeleton, Space, Typography } from "antd";
+import { SafetyCertificateOutlined } from "@ant-design/icons";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import type { Pricing, PaymentKind, Project } from "@/lib/types";
-import { RequireAuth, PageHead, Skeleton } from "@/components/ui";
+import type { PaymentKind, Pricing, Project } from "@/lib/types";
+import { RequireAuth } from "@/components/ui";
+
+const { Title, Text } = Typography;
 
 function money(minor: number, currency: string) {
-  return `${(minor / 100).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} ${currency}`;
+  return `${(minor / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
 function CheckoutInner() {
@@ -50,122 +51,78 @@ function CheckoutInner() {
     }
   }
 
-  if (err && !pricing) return <div className="error">{err}</div>;
   if (!pricing || !project) {
     return (
-      <div className="card" style={{ maxWidth: 620 }}>
-        <Skeleton h={20} w="50%" />
-        <div style={{ height: 12 }} />
-        <Skeleton h={90} />
-        <div style={{ height: 8 }} />
-        <Skeleton h={90} />
-      </div>
+      <Card style={{ maxWidth: 620, margin: "0 auto" }}>
+        {err ? <Alert type="error" message={err} showIcon /> : <Skeleton active />}
+      </Card>
     );
   }
 
   const cur = pricing.currency;
   const isReview = kind === "per_review";
   const amount = isReview ? pricing.per_review_minor : pricing.subscription_minor;
-  const total = isReview
-    ? pricing.per_review_total_minor
-    : pricing.subscription_total_minor;
+  const total = isReview ? pricing.per_review_total_minor : pricing.subscription_total_minor;
   const vat = total - amount;
-  const subDesc = t("checkout.subDesc").replace(
-    "{days}",
-    String(pricing.subscription_period_days)
-  );
-
-  const Option = ({
-    value,
-    title,
-    desc,
-    priceMinor,
-    suffix,
-  }: {
-    value: PaymentKind;
-    title: string;
-    desc: string;
-    priceMinor: number;
-    suffix: string;
-  }) => (
-    <button
-      type="button"
-      onClick={() => setKind(value)}
-      className={`pay-option${kind === value ? " selected" : ""}`}
-    >
-      <span className="radio" aria-hidden />
-      <span className="po-body">
-        <span className="po-title">{title}</span>
-        <span className="po-desc">{desc}</span>
-      </span>
-      <span className="po-price">
-        {money(priceMinor, cur)}
-        <span className="po-suffix">{suffix}</span>
-      </span>
-    </button>
-  );
+  const subDesc = t("checkout.subDesc").replace("{days}", String(pricing.subscription_period_days));
 
   return (
-    <>
-      <PageHead title={t("checkout.title")} />
-      <div className="card" style={{ maxWidth: 620 }}>
-        <p className="muted" style={{ marginTop: 0 }}>
-          {t("checkout.for")}
-        </p>
-        <p style={{ fontWeight: 700, fontSize: 16, marginTop: 0 }}>{project.title}</p>
+    <div style={{ maxWidth: 620, margin: "0 auto" }}>
+      <Title level={3}>{t("checkout.title")}</Title>
+      <Card>
+        <Text type="secondary">{t("checkout.for")}</Text>
+        <Title level={5} style={{ marginTop: 4 }}>{project.title}</Title>
 
-        <h3 style={{ fontSize: 14, marginBottom: 10 }}>{t("checkout.choose")}</h3>
-        <div className="stack" style={{ gap: 10 }}>
-          <Option
-            value="per_review"
-            title={t("checkout.perReview")}
-            desc={t("checkout.perReviewDesc")}
-            priceMinor={pricing.per_review_total_minor}
-            suffix={` · ${t("checkout.oneReview")}`}
-          />
-          <Option
-            value="subscription"
-            title={t("checkout.subscription")}
-            desc={subDesc}
-            priceMinor={pricing.subscription_total_minor}
-            suffix={` ${t("checkout.perMonth")}`}
-          />
-        </div>
+        <Text strong>{t("checkout.choose")}</Text>
+        <Radio.Group
+          value={kind}
+          onChange={(e) => setKind(e.target.value)}
+          style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10, width: "100%" }}
+        >
+          {[
+            { value: "per_review", title: t("checkout.perReview"), desc: t("checkout.perReviewDesc"), price: pricing.per_review_total_minor, suffix: t("checkout.oneReview") },
+            { value: "subscription", title: t("checkout.subscription"), desc: subDesc, price: pricing.subscription_total_minor, suffix: t("checkout.perMonth") },
+          ].map((o) => (
+            <Card key={o.value} size="small" hoverable onClick={() => setKind(o.value as PaymentKind)}
+              style={{ borderColor: kind === o.value ? "#006c35" : undefined }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <Radio value={o.value}>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{o.title}</div>
+                    <div style={{ fontSize: 12, opacity: 0.65 }}>{o.desc}</div>
+                  </div>
+                </Radio>
+                <div style={{ fontWeight: 800, whiteSpace: "nowrap" }}>
+                  {money(o.price, cur)} <span style={{ fontSize: 12, opacity: 0.6 }}>{o.suffix}</span>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </Radio.Group>
 
-        {/* Price breakdown for the selected option */}
-        <dl className="kv" style={{ margin: "18px 0 8px" }}>
-          <dt>{t("pay.amount")}</dt>
-          <dd>{money(amount, cur)}</dd>
-          <dt>{t("pay.vat")}</dt>
-          <dd>{money(vat, cur)}</dd>
-          <dt>
-            <strong>{t("pay.total")}</strong>
-          </dt>
-          <dd>
+        <Descriptions column={1} size="small" style={{ margin: "16px 0" }}>
+          <Descriptions.Item label={t("pay.amount")}>{money(amount, cur)}</Descriptions.Item>
+          <Descriptions.Item label={t("pay.vat")}>{money(vat, cur)}</Descriptions.Item>
+          <Descriptions.Item label={<strong>{t("pay.total")}</strong>}>
             <strong>{money(total, cur)}</strong>
-          </dd>
-        </dl>
+          </Descriptions.Item>
+        </Descriptions>
 
-        {err && <div className="error">{err}</div>}
+        {err && <Alert type="error" message={err} showIcon style={{ marginBottom: 12 }} />}
 
-        <div className="flex-between" style={{ marginTop: 16, gap: 10 }}>
-          <button
-            className="btn btn-secondary"
-            onClick={() => router.push(`/projects/${id}`)}
-            disabled={busy}
-          >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <Button onClick={() => router.push(`/projects/${id}`)} disabled={busy}>
             {t("checkout.cancel")}
-          </button>
-          <button className="btn btn-success" onClick={pay} disabled={busy}>
-            {busy ? t("checkout.starting") : `${t("checkout.proceed")} · ${money(total, cur)}`}
-          </button>
+          </Button>
+          <Button type="primary" onClick={pay} loading={busy}>
+            {t("checkout.proceed")} · {money(total, cur)}
+          </Button>
         </div>
-
-        <p className="small muted" style={{ marginTop: 14, marginBottom: 0 }}>
-          🔒 {t("checkout.secured")} {t("checkout.vatIncluded")}
-        </p>
-      </div>
-    </>
+        <Text type="secondary" style={{ display: "block", marginTop: 14, fontSize: 12 }}>
+          <SafetyCertificateOutlined /> {t("checkout.secured")} {t("checkout.vatIncluded")}
+        </Text>
+      </Card>
+    </div>
   );
 }
 

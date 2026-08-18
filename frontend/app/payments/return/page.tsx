@@ -3,16 +3,14 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { Alert, Button, Card, Descriptions, Result, Space, Spin } from "antd";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { Payment } from "@/lib/types";
-import { RequireAuth, PageHead, Skeleton } from "@/components/ui";
+import { RequireAuth } from "@/components/ui";
 
 function money(minor: number, currency: string) {
-  return `${(minor / 100).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} ${currency}`;
+  return `${(minor / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
 function ReturnInner() {
@@ -21,7 +19,6 @@ function ReturnInner() {
   const paymentId = params.get("payment_id");
   const chargeId = params.get("charge_id");
   const isMock = params.get("mock") === "1";
-
   const [payment, setPayment] = useState<Payment | null>(null);
   const [busy, setBusy] = useState(false);
   const submitted = useRef(false);
@@ -31,27 +28,22 @@ function ReturnInner() {
     try {
       const p = await api.getPayment(paymentId);
       setPayment(p);
-      // On success, finish the Model-A flow by submitting the project (idempotent
-      // server-side: already-submitted projects just 409 and are ignored).
       if (p.status === "paid" && p.project_id && !submitted.current) {
         submitted.current = true;
         try {
           await api.submitProject(p.project_id);
         } catch {
-          /* already submitted / not submittable — ignore */
+          /* already submitted */
         }
       }
     } catch {
-      /* ignore transient errors while polling */
+      /* ignore */
     }
   }, [paymentId]);
 
   useEffect(() => {
     load();
   }, [load]);
-
-  // Poll while pending (covers the real-gateway case where the webhook settles
-  // the charge a moment after the customer returns).
   useEffect(() => {
     if (!payment || payment.status !== "pending") return;
     const id = setInterval(load, 3000);
@@ -69,96 +61,72 @@ function ReturnInner() {
     }
   }
 
+  const href = payment?.project_id ? `/projects/${payment.project_id}` : "/projects";
   const status = payment?.status;
-  const projectHref = payment?.project_id ? `/projects/${payment.project_id}` : "/projects";
 
   return (
-    <>
-      <PageHead title={t("pay.return.title")} />
-      <div className="card" style={{ maxWidth: 560 }}>
+    <div style={{ maxWidth: 560, margin: "0 auto" }}>
+      <Card>
         {!payment ? (
-          <div className="stack" style={{ gap: 10 }}>
-            <Skeleton h={20} w="50%" />
-            <Skeleton h={14} w="80%" />
+          <div style={{ textAlign: "center", padding: 32 }}>
+            <Spin size="large" />
           </div>
+        ) : status === "paid" ? (
+          <Result
+            status="success"
+            title={t("pay.paid")}
+            subTitle={t("pay.paidBody")}
+            extra={<Link href={href}><Button type="primary">{t("pay.backToProject")}</Button></Link>}
+          />
+        ) : status === "failed" || status === "expired" ? (
+          <Result
+            status="error"
+            title={t("pay.failed")}
+            subTitle={t("pay.failedBody")}
+            extra={<Link href={href}><Button>{t("pay.backToProject")}</Button></Link>}
+          />
         ) : (
           <>
-            {/* Amount summary */}
-            <dl className="kv" style={{ marginBottom: 16 }}>
-              <dt>{t("pay.amount")}</dt>
-              <dd>{money(payment.amount_minor, payment.currency)}</dd>
-              <dt>{t("pay.vat")}</dt>
-              <dd>{money(payment.vat_minor, payment.currency)}</dd>
-              <dt>
-                <strong>{t("pay.total")}</strong>
-              </dt>
-              <dd>
+            <Descriptions column={1} bordered size="small" style={{ marginBottom: 16 }}>
+              <Descriptions.Item label={t("pay.amount")}>{money(payment.amount_minor, payment.currency)}</Descriptions.Item>
+              <Descriptions.Item label={t("pay.vat")}>{money(payment.vat_minor, payment.currency)}</Descriptions.Item>
+              <Descriptions.Item label={t("pay.total")}>
                 <strong>{money(payment.total_minor, payment.currency)}</strong>
-              </dd>
-            </dl>
-
-            {status === "paid" && (
-              <div className="stack" style={{ gap: 8 }}>
-                <div style={{ fontSize: 40 }}>✅</div>
-                <h3 style={{ margin: 0 }}>{t("pay.paid")}</h3>
-                <p className="muted" style={{ margin: 0 }}>{t("pay.paidBody")}</p>
-                <Link href={projectHref} className="btn" style={{ marginTop: 8 }}>
-                  {t("pay.backToProject")}
-                </Link>
-              </div>
-            )}
-
-            {(status === "failed" || status === "expired") && (
-              <div className="stack" style={{ gap: 8 }}>
-                <div style={{ fontSize: 40 }}>⚠️</div>
-                <h3 style={{ margin: 0 }}>{t("pay.failed")}</h3>
-                <p className="muted" style={{ margin: 0 }}>{t("pay.failedBody")}</p>
-                <Link href={projectHref} className="btn btn-secondary" style={{ marginTop: 8 }}>
-                  {t("pay.backToProject")}
-                </Link>
-              </div>
-            )}
-
-            {(status === "pending" || status === "initiated") && (
-              <div className="stack" style={{ gap: 12 }}>
-                <div className="flex" style={{ gap: 10, alignItems: "center" }}>
-                  <div className="spinner" />
-                  <span className="muted">{t("pay.processing")}</span>
-                </div>
-                {isMock && (
-                  <div className="info-box">
-                    <p style={{ marginTop: 0 }}>{t("pay.sandboxNote")}</p>
-                    <div className="flex" style={{ gap: 8 }}>
-                      <button
-                        className="btn btn-success btn-sm"
-                        onClick={() => simulate("paid")}
-                        disabled={busy}
-                      >
-                        {t("pay.simulatePay")}
-                      </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => simulate("failed")}
-                        disabled={busy}
-                      >
-                        {t("pay.simulateFail")}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              </Descriptions.Item>
+            </Descriptions>
+            <div style={{ textAlign: "center", marginBottom: 12 }}>
+              <Space>
+                <Spin />
+                <span style={{ opacity: 0.7 }}>{t("pay.processing")}</span>
+              </Space>
+            </div>
+            {isMock && (
+              <Alert
+                type="info"
+                message={t("pay.sandboxNote")}
+                description={
+                  <Space style={{ marginTop: 8 }}>
+                    <Button type="primary" loading={busy} onClick={() => simulate("paid")}>
+                      {t("pay.simulatePay")}
+                    </Button>
+                    <Button danger loading={busy} onClick={() => simulate("failed")}>
+                      {t("pay.simulateFail")}
+                    </Button>
+                  </Space>
+                }
+              />
             )}
           </>
         )}
-      </div>
-    </>
+      </Card>
+    </div>
   );
 }
 
 export default function PaymentReturnPage() {
   return (
     <RequireAuth roles={["organization"]}>
-      <Suspense fallback={<div className="center-page"><div className="spinner" /></div>}>
+      <Suspense fallback={<Spin />}>
         <ReturnInner />
       </Suspense>
     </RequireAuth>
