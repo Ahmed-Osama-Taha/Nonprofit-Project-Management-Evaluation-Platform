@@ -3,10 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogIn, ShieldCheck } from "lucide-react";
+import { Alert, Button, Card, Form, Input, Space, Typography } from "antd";
+import { LockOutlined, MailOutlined, SafetyOutlined } from "@ant-design/icons";
 import { useAuth, homeForRole } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import { Button, Card, CardContent, Input, Label } from "@/components/uikit";
+
+const { Title, Text } = Typography;
 
 const DEMO = [
   { role: "organization", email: "org@demo.org", password: "Org123!" },
@@ -18,17 +20,15 @@ export default function LoginPage() {
   const { login } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [form] = Form.useForm();
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function onFinish(v: { email: string; password: string }) {
     setBusy(true);
     setErr("");
     try {
-      const user = await login(email, password);
+      const user = await login(v.email, v.password);
       router.replace(homeForRole(user.role));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Login failed");
@@ -38,89 +38,66 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-[80vh] w-full max-w-md flex-col justify-center py-10">
-      {/* Brand */}
-      <div className="mb-8 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-2xl font-extrabold text-white shadow-soft">
+    <div style={{ maxWidth: 400, margin: "6vh auto 0", width: "100%" }}>
+      <div style={{ textAlign: "center", marginBottom: 24 }}>
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: 16,
+            margin: "0 auto 14px",
+            display: "grid",
+            placeItems: "center",
+            background: "#006c35",
+            color: "#fff",
+            fontSize: 26,
+            fontWeight: 800,
+          }}
+        >
           أ
         </div>
-        <h1 className="m-0 text-2xl font-extrabold tracking-tight text-fg">
+        <Title level={3} style={{ margin: 0 }}>
           {t("app.name")} · Athar
-        </h1>
-        <p className="mt-1.5 text-sm text-muted">{t("app.tagline")}</p>
+        </Title>
+        <Text type="secondary">{t("app.tagline")}</Text>
       </div>
 
-      <Card className="animate-slide-up">
-        <CardContent className="p-6">
-          <h2 className="mb-4 text-lg font-bold text-fg">{t("auth.signIn")}</h2>
-          {err && (
-            <div className="mb-4 rounded-md border border-danger/30 bg-danger/10 px-3 py-2.5 text-sm text-danger">
-              {err}
-            </div>
-          )}
-          <form onSubmit={submit} className="space-y-4">
-            <div>
-              <Label>{t("auth.email")}</Label>
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                placeholder="you@example.org"
-              />
-            </div>
-            <div>
-              <Label>{t("auth.password")}</Label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-                placeholder="••••••••"
-              />
-            </div>
-            <Button className="w-full" size="lg" disabled={busy}>
-              <LogIn className="h-4 w-4" />
-              {busy ? t("common.loading") : t("auth.signIn")}
-            </Button>
-          </form>
-          <p className="mt-4 text-sm text-muted">
-            {t("auth.noAccount")}{" "}
-            <Link href="/register" className="font-semibold text-brand-700 hover:underline">
-              {t("auth.registerOrg")}
-            </Link>
-          </p>
-        </CardContent>
+      <Card>
+        <Title level={4} style={{ marginTop: 0 }}>
+          {t("auth.signIn")}
+        </Title>
+        {err && <Alert type="error" message={err} showIcon style={{ marginBottom: 16 }} />}
+        <Form form={form} layout="vertical" onFinish={onFinish} requiredMark={false}>
+          <Form.Item name="email" label={t("auth.email")} rules={[{ required: true, type: "email" }]}>
+            <Input size="large" prefix={<MailOutlined />} placeholder="you@example.org" autoComplete="email" />
+          </Form.Item>
+          <Form.Item name="password" label={t("auth.password")} rules={[{ required: true }]}>
+            <Input.Password size="large" prefix={<LockOutlined />} placeholder="••••••••" autoComplete="current-password" />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" size="large" block loading={busy}>
+            {t("auth.signIn")}
+          </Button>
+        </Form>
+        <div style={{ marginTop: 16 }}>
+          <Text type="secondary">{t("auth.noAccount")} </Text>
+          <Link href="/register">{t("auth.registerOrg")}</Link>
+        </div>
       </Card>
 
-      {/* Demo accounts */}
-      <Card className="mt-4">
-        <CardContent className="p-5">
-          <div className="mb-3 flex items-center gap-2 text-sm font-bold text-fg">
-            <ShieldCheck className="h-4 w-4 text-brand" />
-            {t("auth.demoAccounts")}
-          </div>
-          <div className="grid gap-2">
-            {DEMO.map((d) => (
-              <Button
-                key={d.email}
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="justify-between"
-                onClick={() => {
-                  setEmail(d.email);
-                  setPassword(d.password);
-                }}
-              >
-                <span>{t(`role.${d.role}`)}</span>
-                <span className="font-mono text-xs opacity-70">{d.email}</span>
-              </Button>
-            ))}
-          </div>
-        </CardContent>
+      <Card style={{ marginTop: 16 }} size="small" title={<Space><SafetyOutlined />{t("auth.demoAccounts")}</Space>}>
+        <Space direction="vertical" style={{ width: "100%" }}>
+          {DEMO.map((d) => (
+            <Button
+              key={d.email}
+              block
+              style={{ display: "flex", justifyContent: "space-between" }}
+              onClick={() => form.setFieldsValue({ email: d.email, password: d.password })}
+            >
+              <span>{t(`role.${d.role}`)}</span>
+              <span style={{ fontFamily: "monospace", opacity: 0.7, fontSize: 12 }}>{d.email}</span>
+            </Button>
+          ))}
+        </Space>
       </Card>
     </div>
   );

@@ -1,9 +1,9 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
+import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { AuthProvider } from "@/lib/auth";
 import { I18nProvider } from "@/lib/i18n";
-import { NavBar } from "@/components/NavBar";
-import { Tracker } from "@/components/Tracker";
+import { AppProviders } from "@/components/AppProviders";
 
 export const metadata: Metadata = {
   title: "Athar · أثر — Nonprofit Project Evaluation",
@@ -15,8 +15,6 @@ export const metadata: Metadata = {
   formatDetection: { telephone: false },
 };
 
-// Mobile-first viewport: fills the screen, respects iOS notch safe-areas, and
-// paints the browser chrome in the brand colour.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -24,21 +22,17 @@ export const viewport: Viewport = {
   themeColor: "#006c35",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ar" dir="rtl">
       <body>
-        <I18nProvider>
-          <AuthProvider>
-            <Tracker />
-            <NavBar />
-            <main className="container">{children}</main>
-          </AuthProvider>
-        </I18nProvider>
+        <AntdRegistry>
+          <I18nProvider>
+            <AuthProvider>
+              <AppProviders>{children}</AppProviders>
+            </AuthProvider>
+          </I18nProvider>
+        </AntdRegistry>
       </body>
     </html>
   );
