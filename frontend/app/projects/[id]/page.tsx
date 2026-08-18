@@ -2,24 +2,89 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  Form,
+  Input,
+  InputNumber,
+  List,
+  Popconfirm,
+  Result,
+  Row,
+  Space,
+  Spin,
+  Steps,
+  Tag,
+  Typography,
+  Upload,
+  message,
+} from "antd";
+import type { UploadProps } from "antd";
+import {
+  ArrowLeftOutlined,
+  CheckCircleTwoTone,
+  DeleteOutlined,
+  DownloadOutlined,
+  EditOutlined,
+  FileTextOutlined,
+  InboxOutlined,
+} from "@ant-design/icons";
 import { api, ApiError } from "@/lib/api";
 import type { Project } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { useI18n, fmtMoney } from "@/lib/i18n";
-import {
-  RequireAuth,
-  StatusBadge,
-  PageHead,
-  ProjectFlow,
-  num,
-  dateStr,
-} from "@/components/ui";
+import { RequireAuth, num, dateStr } from "@/components/ui";
 import { AIPanel } from "@/components/AIPanel";
 import { Reviews, ReviewActions } from "@/components/project/ReviewPanel";
 import { ChatBox } from "@/components/project/ChatBox";
-import Link from "next/link";
+
+const { Title, Text, Paragraph } = Typography;
+const { TextArea } = Input;
 
 const EDITABLE = ["draft", "changes_requested"];
+
+const STATUS_TAG: Record<string, string> = {
+  draft: "default",
+  submitted: "blue",
+  under_review: "gold",
+  changes_requested: "orange",
+  approved: "green",
+  rejected: "red",
+};
+
+/** AntD lifecycle stepper for a project's journey. */
+function Flow({ status }: { status: string }) {
+  const { t } = useI18n();
+  const idx =
+    status === "approved" || status === "rejected"
+      ? 3
+      : status === "under_review"
+        ? 2
+        : status === "submitted"
+          ? 1
+          : 0;
+  const rejected = status === "rejected";
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <Steps
+        responsive
+        current={idx}
+        status={rejected ? "error" : "process"}
+        items={[
+          { title: t("flow.draft") },
+          { title: t("flow.submitted") },
+          { title: t("flow.review") },
+          { title: t("flow.decision") },
+        ]}
+      />
+    </Card>
+  );
+}
 
 function Detail() {
   const { id } = useParams<{ id: string }>();
@@ -54,49 +119,64 @@ function Detail() {
 
   if (loading)
     return (
-      <div className="center-page">
-        <div className="spinner" />
+      <div style={{ textAlign: "center", padding: 64 }}>
+        <Spin size="large" />
       </div>
     );
-  if (err) return <div className="error">{err}</div>;
+  if (err) return <Alert type="error" message={err} showIcon />;
   if (!p) return null;
 
-  const isOwner =
-    user?.role === "organization" && p.organization.id === user.organization_id;
+  const isOwner = user?.role === "organization" && p.organization.id === user.organization_id;
   const isReviewer = user?.role === "reviewer" || user?.role === "admin";
   const canEdit = isOwner && EDITABLE.includes(p.status);
 
   return (
     <>
       {isReviewer && (
-        <Link href="/reviewer" className="nav-link" style={{ display: "inline-block", marginBottom: 10 }}>
-          {t("flow.backToQueue")}
+        <Link href="/reviewer">
+          <Button type="link" icon={<ArrowLeftOutlined />} style={{ paddingInlineStart: 0, marginBottom: 4 }}>
+            {t("flow.backToQueue")}
+          </Button>
         </Link>
       )}
 
-      <PageHead
-        title={p.title}
-        sub={`${p.organization.name}${p.submitted_at ? " · " + dateStr(p.submitted_at) : ""}`}
-        action={<StatusBadge status={p.status} />}
-      />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+          marginBottom: 16,
+        }}
+      >
+        <div>
+          <Title level={3} style={{ margin: 0 }}>
+            {p.title}
+          </Title>
+          <Text type="secondary">
+            {p.organization.name}
+            {p.submitted_at ? ` · ${dateStr(p.submitted_at)}` : ""}
+          </Text>
+        </div>
+        <Tag color={STATUS_TAG[p.status]} style={{ fontSize: 13, padding: "2px 10px" }}>
+          {t(`status.${p.status}`)}
+        </Tag>
+      </div>
 
-      <ProjectFlow status={p.status} />
+      <Flow status={p.status} />
 
-      {msg && <div className="success-box">{msg}</div>}
+      {msg && <Alert type="success" message={msg} showIcon closable style={{ marginBottom: 16 }} onClose={() => setMsg("")} />}
 
       {isOwner && <OwnerStatusBanner status={p.status} />}
 
-      {isReviewer && (
-        <AIPanel projectId={p.id} analysis={p.ai_analysis} canRerun onRerun={load} />
-      )}
+      {isReviewer && <AIPanel projectId={p.id} analysis={p.ai_analysis} canRerun onRerun={load} />}
 
       <DetailsCard project={p} canEdit={!!canEdit} onSaved={load} />
 
       <Documents project={p} canEdit={!!canEdit} onChange={load} />
 
-      {isOwner && (
-        <OwnerActions project={p} onChange={load} setMsg={setMsg} setErr={setErr} />
-      )}
+      {isOwner && <OwnerActions project={p} onChange={load} setMsg={setMsg} setErr={setErr} />}
 
       <Reviews project={p} />
 
@@ -106,29 +186,29 @@ function Detail() {
   );
 }
 
-function Section({ title, body }: { title: string; body?: string | null }) {
-  if (!body) return null;
-  return (
-    <div style={{ marginTop: 12 }}>
-      <strong>{title}</strong>
-      <p style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{body}</p>
-    </div>
-  );
-}
-
 /** Contextual status message for the owner on non-editable states. */
 function OwnerStatusBanner({ status }: { status: string }) {
   const { t } = useI18n();
-  const map: Record<string, { cls: string; key: string }> = {
-    submitted: { cls: "info-box", key: "flow.awaiting" },
-    under_review: { cls: "info-box", key: "flow.inReview" },
-    changes_requested: { cls: "warn-box", key: "flow.changes" },
-    approved: { cls: "success-box", key: "flow.approved" },
-    rejected: { cls: "error", key: "flow.rejected" },
+  const map: Record<string, { type: "info" | "warning" | "success" | "error"; key: string }> = {
+    submitted: { type: "info", key: "flow.awaiting" },
+    under_review: { type: "info", key: "flow.inReview" },
+    changes_requested: { type: "warning", key: "flow.changes" },
+    approved: { type: "success", key: "flow.approved" },
+    rejected: { type: "error", key: "flow.rejected" },
   };
   const m = map[status];
   if (!m) return null;
-  return <div className={m.cls} style={{ marginBottom: 14 }}>{t(m.key)}</div>;
+  return <Alert type={m.type} message={t(m.key)} showIcon style={{ marginBottom: 16 }} />;
+}
+
+function DocSection({ title, body }: { title: string; body?: string | null }) {
+  if (!body) return null;
+  return (
+    <div style={{ marginTop: 16 }}>
+      <Text strong>{title}</Text>
+      <Paragraph style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{body}</Paragraph>
+    </div>
+  );
 }
 
 function Documents({
@@ -142,25 +222,26 @@ function Documents({
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
 
-  async function upload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
-    setBusy(true);
-    setErr("");
-    try {
-      for (const file of files) {
-        await api.uploadDocument(project.id, file);
+  const uploadProps: UploadProps = {
+    multiple: true,
+    accept: ".pdf,.docx,.txt,.md,.csv",
+    showUploadList: false,
+    disabled: busy,
+    beforeUpload: async (file) => {
+      setBusy(true);
+      try {
+        await api.uploadDocument(project.id, file as File);
+        message.success(t("proj.upload"));
+        onChange();
+      } catch (e) {
+        message.error(e instanceof Error ? e.message : "Upload failed");
+      } finally {
+        setBusy(false);
       }
-      onChange();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setBusy(false);
-      e.target.value = "";
-    }
-  }
+      return Upload.LIST_IGNORE;
+    },
+  };
 
   async function download(docId: string) {
     const { url } = await api.downloadDocument(project.id, docId);
@@ -168,75 +249,74 @@ function Documents({
   }
 
   async function remove(docId: string) {
-    setErr("");
     try {
       await api.deleteDocument(project.id, docId);
       onChange();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Delete failed");
+      message.error(e instanceof Error ? e.message : "Delete failed");
     }
   }
 
+  const docs = project.documents ?? [];
+
   return (
-    <div className="card">
-      <div className="card-title">
-        <h3 style={{ margin: 0 }}>{t("proj.documents")}</h3>
-        {canEdit && (
-          <label className="btn btn-secondary btn-sm" style={{ margin: 0 }}>
-            {busy ? t("common.loading") : `+ ${t("proj.upload")}`}
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.docx,.txt,.md,.csv"
-              onChange={upload}
-              style={{ display: "none" }}
-              disabled={busy}
-            />
-          </label>
-        )}
-      </div>
-      {canEdit && (
-        <p className="small muted" style={{ marginTop: 6 }}>
-          PDF · DOCX · TXT · MD · CSV — up to 20 MB each. You can add several.
-        </p>
+    <Card
+      style={{ marginBottom: 16 }}
+      title={t("proj.documents")}
+      extra={
+        canEdit && (
+          <Upload {...uploadProps}>
+            <Button size="small" loading={busy}>
+              + {t("proj.upload")}
+            </Button>
+          </Upload>
+        )
+      }
+    >
+      {canEdit && docs.length === 0 && (
+        <Upload.Dragger {...uploadProps} style={{ marginBottom: 12 }}>
+          <p className="ant-upload-drag-icon">
+            <InboxOutlined />
+          </p>
+          <p className="ant-upload-text">{t("proj.upload")}</p>
+          <p className="ant-upload-hint">PDF · DOCX · TXT · MD · CSV — up to 20 MB each.</p>
+        </Upload.Dragger>
       )}
-      {err && (
-        <div className="error" style={{ marginTop: 10 }}>
-          {err}
-        </div>
-      )}
-      {(project.documents?.length ?? 0) === 0 ? (
-        <p className="muted small">{t("common.none")}</p>
+
+      {docs.length === 0 ? (
+        !canEdit && <Text type="secondary">{t("common.none")}</Text>
       ) : (
-        <div style={{ marginTop: 8 }}>
-          {project.documents!.map((d) => (
-            <div key={d.id} className="list-item flex-between">
-              <button
-                className="btn-secondary btn btn-sm"
-                onClick={() => download(d.id)}
-              >
-                {d.filename}
-              </button>
-              <span className="flex" style={{ gap: 10, alignItems: "center" }}>
-                <span className="small muted">
-                  {d.content_type} · {d.extraction_status}
-                </span>
-                {canEdit && (
-                  <button
-                    className="btn btn-danger btn-sm"
-                    onClick={() => remove(d.id)}
-                    disabled={busy}
-                    aria-label="Delete document"
-                  >
-                    ✕
-                  </button>
-                )}
-              </span>
-            </div>
-          ))}
-        </div>
+        <List
+          dataSource={docs}
+          renderItem={(d) => (
+            <List.Item
+              actions={[
+                <Button key="dl" type="text" icon={<DownloadOutlined />} onClick={() => download(d.id)} />,
+                canEdit ? (
+                  <Popconfirm key="rm" title={t("common.delete") ?? "Delete"} onConfirm={() => remove(d.id)}>
+                    <Button type="text" danger icon={<DeleteOutlined />} disabled={busy} />
+                  </Popconfirm>
+                ) : null,
+              ].filter(Boolean)}
+            >
+              <List.Item.Meta
+                avatar={<FileTextOutlined style={{ fontSize: 20, color: "#006c35" }} />}
+                title={
+                  <a onClick={() => download(d.id)} style={{ cursor: "pointer" }}>
+                    {d.filename}
+                  </a>
+                }
+                description={
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {d.content_type} · {d.extraction_status}
+                  </Text>
+                }
+              />
+            </List.Item>
+          )}
+        />
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -255,6 +335,7 @@ function OwnerActions({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const canSubmit = ["draft", "changes_requested"].includes(project.status);
+
   if (!canSubmit) return null;
 
   async function submit() {
@@ -263,12 +344,11 @@ function OwnerActions({
     setErr("");
     try {
       await api.submitProject(project.id);
-      setMsg("✓");
+      setMsg(t("proj.submitConfirm"));
       onChange();
     } catch (e) {
       // 402 = payment required (Model A). Send the user to the checkout screen
-      // where they see the price + VAT and choose how to pay — never redirect
-      // straight to a gateway without showing the amount.
+      // where they see the price + VAT and choose how to pay.
       if (e instanceof ApiError && e.status === 402) {
         router.push(`/projects/${project.id}/checkout`);
         return;
@@ -282,41 +362,56 @@ function OwnerActions({
   const detailsDone = !!(project.problem_statement && project.goals);
   const docsDone = (project.documents?.length ?? 0) > 0;
 
-  const Item = ({ done, title, hint }: { done: boolean; title: string; hint: string }) => (
-    <div className={`next-item${done ? " done" : ""}`}>
-      <span className="tick">{done ? "✓" : ""}</span>
-      <span>
-        <span className="ni-title">{title}</span>
-        <div className="ni-hint">{hint}</div>
-      </span>
-    </div>
-  );
+  const steps = [
+    { done: detailsDone, title: t("flow.stepDetails"), hint: t("flow.detailsHint") },
+    { done: docsDone, title: t("flow.stepDocs"), hint: t("flow.docsHint") },
+    { done: false, title: t("flow.stepSubmit"), hint: t("flow.submitHint") },
+  ];
 
   return (
-    <div className="card">
-      <div className="card-title">
-        <h3 style={{ margin: 0 }}>{t("flow.next")}</h3>
-      </div>
-      <div className="next-step" style={{ marginBottom: 16 }}>
-        <Item done={detailsDone} title={t("flow.stepDetails")} hint={t("flow.detailsHint")} />
-        <Item done={docsDone} title={t("flow.stepDocs")} hint={t("flow.docsHint")} />
-        <Item done={false} title={t("flow.stepSubmit")} hint={t("flow.submitHint")} />
-      </div>
-      <button
-        className="btn btn-success"
+    <Card style={{ marginBottom: 16 }} title={t("flow.next")}>
+      <List
+        itemLayout="horizontal"
+        dataSource={steps}
+        style={{ marginBottom: 12 }}
+        renderItem={(s) => (
+          <List.Item>
+            <List.Item.Meta
+              avatar={
+                s.done ? (
+                  <CheckCircleTwoTone twoToneColor="#006c35" style={{ fontSize: 20 }} />
+                ) : (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 20,
+                      height: 20,
+                      borderRadius: "50%",
+                      border: "2px solid #d9d9d9",
+                    }}
+                  />
+                )
+              }
+              title={s.title}
+              description={s.hint}
+            />
+          </List.Item>
+        )}
+      />
+      <Button
+        type="primary"
         onClick={submit}
-        disabled={busy || !detailsDone}
+        loading={busy}
+        disabled={!detailsDone}
         title={!detailsDone ? t("flow.detailsHint") : undefined}
       >
-        {busy ? t("common.loading") : t("proj.submitConfirm")}
-      </button>
-    </div>
+        {t("proj.submitConfirm")}
+      </Button>
+    </Card>
   );
 }
 
-/** Single source of truth for the project's details: read-only view with an
- *  inline "Edit details" toggle (owners, while editable). No more duplicate
- *  read-only + separate edit-form cards. */
+/** Read-only details with an inline "Edit" toggle (owners, while editable). */
 function DetailsCard({
   project,
   canEdit,
@@ -343,37 +438,32 @@ function DetailsCard({
   }
 
   return (
-    <div className="card">
-      <div className="card-title flex-between">
-        <h3 style={{ margin: 0 }}>{t("common.viewDetails")}</h3>
-        {canEdit && (
-          <button className="btn btn-secondary btn-sm" onClick={() => setEditing(true)}>
-            ✎ {t("flow.edit")}
-          </button>
-        )}
-      </div>
-      <dl className="kv">
-        <dt>{t("proj.category")}</dt>
-        <dd>{project.category || t("common.none")}</dd>
-        <dt>{t("proj.location")}</dt>
-        <dd>{project.location || t("common.none")}</dd>
-        <dt>{t("proj.budget")}</dt>
-        <dd>{fmtMoney(t, project.requested_budget)}</dd>
-        <dt>{t("proj.targetBeneficiaries")}</dt>
-        <dd>{num(project.target_beneficiaries)}</dd>
-        <dt>{t("proj.duration")}</dt>
-        <dd>
-          {project.duration_months
-            ? `${project.duration_months} ${t("common.months")}`
-            : t("common.none")}
-        </dd>
-      </dl>
-      <Section title={t("proj.summary")} body={project.summary} />
-      <Section title={t("proj.problem")} body={project.problem_statement} />
-      <Section title={t("proj.goals")} body={project.goals} />
-      <Section title={t("proj.kpis")} body={project.kpis} />
-      <Section title={t("proj.beneficiaryDesc")} body={project.beneficiary_description} />
-    </div>
+    <Card
+      style={{ marginBottom: 16 }}
+      title={t("common.viewDetails")}
+      extra={
+        canEdit && (
+          <Button size="small" icon={<EditOutlined />} onClick={() => setEditing(true)}>
+            {t("flow.edit")}
+          </Button>
+        )
+      }
+    >
+      <Descriptions column={{ xs: 1, sm: 2 }} size="small">
+        <Descriptions.Item label={t("proj.category")}>{project.category || t("common.none")}</Descriptions.Item>
+        <Descriptions.Item label={t("proj.location")}>{project.location || t("common.none")}</Descriptions.Item>
+        <Descriptions.Item label={t("proj.budget")}>{fmtMoney(t, project.requested_budget)}</Descriptions.Item>
+        <Descriptions.Item label={t("proj.targetBeneficiaries")}>{num(project.target_beneficiaries)}</Descriptions.Item>
+        <Descriptions.Item label={t("proj.duration")}>
+          {project.duration_months ? `${project.duration_months} ${t("common.months")}` : t("common.none")}
+        </Descriptions.Item>
+      </Descriptions>
+      <DocSection title={t("proj.summary")} body={project.summary} />
+      <DocSection title={t("proj.problem")} body={project.problem_statement} />
+      <DocSection title={t("proj.goals")} body={project.goals} />
+      <DocSection title={t("proj.kpis")} body={project.kpis} />
+      <DocSection title={t("proj.beneficiaryDesc")} body={project.beneficiary_description} />
+    </Card>
   );
 }
 
@@ -387,46 +477,33 @@ function EditForm({
   onCancel: () => void;
 }) {
   const { t } = useI18n();
-  const [form, setForm] = useState({
-    title: project.title,
-    summary: project.summary || "",
-    category: project.category || "",
-    location: project.location || "",
-    problem_statement: project.problem_statement || "",
-    goals: project.goals || "",
-    kpis: project.kpis || "",
-    beneficiary_description: project.beneficiary_description || "",
-    requested_budget: project.requested_budget?.toString() || "",
-    currency: project.currency || "SAR",
-    duration_months: project.duration_months?.toString() || "",
-    target_beneficiaries: project.target_beneficiaries?.toString() || "",
-  });
+  const [form] = Form.useForm();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   async function save() {
+    let vals;
+    try {
+      vals = await form.validateFields();
+    } catch {
+      return;
+    }
     setBusy(true);
     setErr("");
     try {
       await api.updateProject(project.id, {
-        title: form.title,
-        summary: form.summary,
-        category: form.category || null,
-        location: form.location || null,
-        problem_statement: form.problem_statement,
-        goals: form.goals,
-        kpis: form.kpis,
-        beneficiary_description: form.beneficiary_description || null,
-        requested_budget: form.requested_budget
-          ? Number(form.requested_budget)
-          : null,
-        currency: form.currency || "SAR",
-        duration_months: form.duration_months
-          ? Number(form.duration_months)
-          : null,
-        target_beneficiaries: form.target_beneficiaries
-          ? Number(form.target_beneficiaries)
-          : null,
+        title: vals.title,
+        summary: vals.summary ?? "",
+        category: vals.category || null,
+        location: vals.location || null,
+        problem_statement: vals.problem_statement ?? "",
+        goals: vals.goals ?? "",
+        kpis: vals.kpis ?? "",
+        beneficiary_description: vals.beneficiary_description || null,
+        requested_budget: vals.requested_budget ?? null,
+        currency: vals.currency || "SAR",
+        duration_months: vals.duration_months ?? null,
+        target_beneficiaries: vals.target_beneficiaries ?? null,
       });
       onSaved();
     } catch (e) {
@@ -436,109 +513,97 @@ function EditForm({
     }
   }
 
-  function set(k: keyof typeof form, v: string) {
-    setForm((f) => ({ ...f, [k]: v }));
-  }
-
   return (
-    <div className="card">
-      <div className="card-title">
-        <h3 style={{ margin: 0 }}>✎ {t("flow.edit")}</h3>
-      </div>
-      {err && <div className="error">{err}</div>}
-      <div className="field">
-        <label>{t("proj.title")}</label>
-        <input value={form.title} onChange={(e) => set("title", e.target.value)} />
-      </div>
-      <div className="row">
-        <div className="field">
-          <label>{t("proj.category")}</label>
-          <input
-            value={form.category}
-            onChange={(e) => set("category", e.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label>{t("proj.location")}</label>
-          <input
-            value={form.location}
-            onChange={(e) => set("location", e.target.value)}
-          />
-        </div>
-      </div>
-      <div className="field">
-        <label>{t("proj.summary")}</label>
-        <textarea
-          value={form.summary}
-          onChange={(e) => set("summary", e.target.value)}
-        />
-      </div>
-      <div className="field">
-        <label>{t("proj.problem")}</label>
-        <textarea
-          value={form.problem_statement}
-          onChange={(e) => set("problem_statement", e.target.value)}
-        />
-      </div>
-      <div className="field">
-        <label>{t("proj.goals")}</label>
-        <textarea value={form.goals} onChange={(e) => set("goals", e.target.value)} />
-      </div>
-      <div className="field">
-        <label>{t("proj.kpis")}</label>
-        <textarea value={form.kpis} onChange={(e) => set("kpis", e.target.value)} />
-      </div>
-      <div className="field">
-        <label>{t("proj.beneficiaryDesc")}</label>
-        <textarea
-          value={form.beneficiary_description}
-          onChange={(e) => set("beneficiary_description", e.target.value)}
-        />
-      </div>
-      <div className="row">
-        <div className="field">
-          <label>{t("proj.budget")}</label>
-          <input
-            type="number"
-            value={form.requested_budget}
-            onChange={(e) => set("requested_budget", e.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label>{t("proj.currency")}</label>
-          <input
-            value={form.currency}
-            onChange={(e) => set("currency", e.target.value)}
-          />
-        </div>
-      </div>
-      <div className="row">
-        <div className="field">
-          <label>{t("proj.duration")}</label>
-          <input
-            type="number"
-            value={form.duration_months}
-            onChange={(e) => set("duration_months", e.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label>{t("proj.targetBeneficiaries")}</label>
-          <input
-            type="number"
-            value={form.target_beneficiaries}
-            onChange={(e) => set("target_beneficiaries", e.target.value)}
-          />
-        </div>
-      </div>
-      <div className="flex">
-        <button className="btn" onClick={save} disabled={busy}>
-          {busy ? t("common.loading") : t("common.save")}
-        </button>
-        <button className="btn btn-secondary" onClick={onCancel}>
-          {t("common.cancel")}
-        </button>
-      </div>
-    </div>
+    <Card
+      style={{ marginBottom: 16 }}
+      title={
+        <Space>
+          <EditOutlined />
+          {t("flow.edit")}
+        </Space>
+      }
+    >
+      {err && <Alert type="error" message={err} showIcon style={{ marginBottom: 16 }} />}
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={{
+          title: project.title,
+          summary: project.summary || "",
+          category: project.category || "",
+          location: project.location || "",
+          problem_statement: project.problem_statement || "",
+          goals: project.goals || "",
+          kpis: project.kpis || "",
+          beneficiary_description: project.beneficiary_description || "",
+          requested_budget: project.requested_budget ?? undefined,
+          currency: project.currency || "SAR",
+          duration_months: project.duration_months ?? undefined,
+          target_beneficiaries: project.target_beneficiaries ?? undefined,
+        }}
+      >
+        <Form.Item name="title" label={t("proj.title")} rules={[{ required: true }]}>
+          <Input />
+        </Form.Item>
+        <Row gutter={12}>
+          <Col xs={24} sm={12}>
+            <Form.Item name="category" label={t("proj.category")}>
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12}>
+            <Form.Item name="location" label={t("proj.location")}>
+              <Input />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Form.Item name="summary" label={t("proj.summary")}>
+          <TextArea rows={3} />
+        </Form.Item>
+        <Form.Item name="problem_statement" label={t("proj.problem")}>
+          <TextArea rows={3} />
+        </Form.Item>
+        <Form.Item name="goals" label={t("proj.goals")}>
+          <TextArea rows={3} />
+        </Form.Item>
+        <Form.Item name="kpis" label={t("proj.kpis")}>
+          <TextArea rows={2} />
+        </Form.Item>
+        <Form.Item name="beneficiary_description" label={t("proj.beneficiaryDesc")}>
+          <TextArea rows={2} />
+        </Form.Item>
+        <Row gutter={12}>
+          <Col xs={24} sm={12}>
+            <Form.Item name="requested_budget" label={t("proj.budget")}>
+              <InputNumber style={{ width: "100%" }} min={0} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12}>
+            <Form.Item name="currency" label={t("proj.currency")}>
+              <Input />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={12}>
+          <Col xs={24} sm={12}>
+            <Form.Item name="duration_months" label={t("proj.duration")}>
+              <InputNumber style={{ width: "100%" }} min={0} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12}>
+            <Form.Item name="target_beneficiaries" label={t("proj.targetBeneficiaries")}>
+              <InputNumber style={{ width: "100%" }} min={0} />
+            </Form.Item>
+          </Col>
+        </Row>
+      </Form>
+      <Space>
+        <Button type="primary" onClick={save} loading={busy}>
+          {t("common.save")}
+        </Button>
+        <Button onClick={onCancel}>{t("common.cancel")}</Button>
+      </Space>
+    </Card>
   );
 }
 

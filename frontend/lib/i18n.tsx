@@ -103,6 +103,7 @@ const EN: Dict = {
   "ai.disabled": "AI is not configured. Set an Anthropic key to enable analysis.",
   "ai.ask": "Ask about this project",
   "ai.askPlaceholder": "Ask a question grounded in the application…",
+  "ai.sources": "sources",
   "ai.model": "Model",
   // Reviewer dashboard
   "rev.title": "Review desk",
@@ -419,6 +420,7 @@ const AR: Dict = {
   "ai.disabled": "الذكاء الاصطناعي غير مُفعّل. أضف مفتاح Anthropic لتفعيل التحليل.",
   "ai.ask": "اسأل عن هذا المشروع",
   "ai.askPlaceholder": "اطرح سؤالاً مبنياً على بيانات الطلب…",
+  "ai.sources": "المصادر",
   "ai.model": "النموذج",
   "rev.title": "مكتب المراجعة",
   "rev.subtitle": "تحليلات المحفظة لترتيب الأولويات واتخاذ القرار.",
