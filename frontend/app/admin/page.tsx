@@ -3,10 +3,16 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useI18n, statusLabel } from "@/lib/i18n";
-import type { AdminSession, AuditEntry, DashboardStats, User } from "@/lib/types";
+import type {
+  AdminSession,
+  AuditEntry,
+  DashboardStats,
+  User,
+  VisitorSummary,
+} from "@/lib/types";
 import { RequireAuth, PageHead, dateStr } from "@/components/ui";
 
-type AdminTab = "overview" | "users" | "logins" | "audit";
+type AdminTab = "overview" | "users" | "logins" | "visitors" | "audit";
 
 function AdminInner() {
   const { t } = useI18n();
@@ -14,6 +20,7 @@ function AdminInner() {
   const [users, setUsers] = useState<User[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [sessions, setSessions] = useState<AdminSession[]>([]);
+  const [visitors, setVisitors] = useState<VisitorSummary[]>([]);
   const [showApiLog, setShowApiLog] = useState(false);
   const [tab, setTab] = useState<AdminTab>("overview");
   const [form, setForm] = useState({ full_name: "", email: "", password: "" });
@@ -25,6 +32,7 @@ function AdminInner() {
     api.users().then(setUsers).catch(() => {});
     api.audit(200, !showApiLog).then(setAudit).catch(() => {});
     api.adminSessions().then(setSessions).catch(() => {});
+    api.visitors().then(setVisitors).catch(() => {});
   }
 
   useEffect(loadAll, [showApiLog]);
@@ -59,6 +67,7 @@ function AdminInner() {
     { key: "overview", label: t("nav.dashboard") },
     { key: "users", label: t("admin.users") },
     { key: "logins", label: t("admin.logins") },
+    { key: "visitors", label: t("admin.visitors") },
     { key: "audit", label: t("admin.audit") },
   ];
 
@@ -231,6 +240,61 @@ function AdminInner() {
                       <button
                         className="btn btn-danger btn-sm"
                         onClick={() => deleteSession(s.id)}
+                      >
+                        {t("admin.delete")}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab === "visitors" && (
+        <div className="card">
+          <div className="card-title">
+            <div>
+              <h3 style={{ margin: 0 }}>{t("admin.visitors")}</h3>
+              <span className="section-hint">{t("admin.visitorsHint")}</span>
+            </div>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>{t("admin.fingerprint")}</th>
+                  <th>{t("admin.user")}</th>
+                  <th>{t("admin.device")}</th>
+                  <th>{t("admin.location")}</th>
+                  <th>{t("admin.evtCount")}</th>
+                  <th>{t("admin.seen")}</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {visitors.map((v) => (
+                  <tr key={v.id}>
+                    <td className="small muted" style={{ fontFamily: "monospace" }}>
+                      {(v.fingerprint_hash || v.visitor_key).slice(0, 12)}…
+                    </td>
+                    <td className="small">{v.user_email || <span className="muted">—</span>}</td>
+                    <td className="small">
+                      {v.platform || "—"}
+                      <div className="muted">{v.timezone || ""}</div>
+                    </td>
+                    <td className="small">{v.location || "—"}</td>
+                    <td className="small">{v.event_count}</td>
+                    <td className="small muted">{dateStr(v.last_seen)}</td>
+                    <td style={{ textAlign: "end" }}>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={async () => {
+                          if (!window.confirm(t("admin.deleteConfirm"))) return;
+                          await api.deleteVisitor(v.id);
+                          setVisitors((s) => s.filter((x) => x.id !== v.id));
+                        }}
                       >
                         {t("admin.delete")}
                       </button>

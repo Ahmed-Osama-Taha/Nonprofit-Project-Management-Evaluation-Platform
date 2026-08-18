@@ -15,6 +15,8 @@ import type {
   ReviewerDashboard,
   SessionInfo,
   User,
+  VisitorSummary,
+  VisitorDetail,
 } from "./types";
 
 // Empty string ("") means "same origin" — calls go to /api/* on the page's own
@@ -206,6 +208,11 @@ export const api = {
     request<AdminSession[]>(`/api/admin/sessions?limit=${limit}`),
   deleteAdminSession: (id: string) =>
     request<void>(`/api/admin/sessions/${id}`, { method: "DELETE" }),
+  visitors: (limit = 200) =>
+    request<VisitorSummary[]>(`/api/admin/visitors?limit=${limit}`),
+  visitor: (id: string) => request<VisitorDetail>(`/api/admin/visitors/${id}`),
+  deleteVisitor: (id: string) =>
+    request<void>(`/api/admin/visitors/${id}`, { method: "DELETE" }),
   createReviewer: (payload: {
     email: string;
     password: string;

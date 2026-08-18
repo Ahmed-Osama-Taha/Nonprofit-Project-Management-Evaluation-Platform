@@ -17,6 +17,7 @@ from app.api import (
     payments,
     projects,
     reviews,
+    tracking,
 )
 from app.core.config import settings
 from app.core.db import SessionLocal, init_db
@@ -30,7 +31,9 @@ logger = logging.getLogger("nppm")
 logging.basicConfig(level=logging.INFO)
 
 # Paths that would flood the audit journal with no security value.
-_AUDIT_SKIP_PREFIXES = ("/api/health", "/docs", "/redoc", "/openapi.json", "/favicon")
+_AUDIT_SKIP_PREFIXES = (
+    "/api/health", "/docs", "/redoc", "/openapi.json", "/favicon", "/api/collect",
+)
 
 
 @asynccontextmanager
@@ -126,6 +129,8 @@ _CSRF_EXEMPT = (
     "/api/auth/token",
     "/api/auth/refresh",
     "/api/auth/logout",
+    "/api/collect",       # public tracking beacon; abuse-guarded by rate limiter
+    "/api/payments/webhook",
 )
 
 
@@ -250,6 +255,7 @@ app.include_router(projects.router)
 app.include_router(reviews.router)
 app.include_router(notifications.router)
 app.include_router(payments.router)
+app.include_router(tracking.router)
 app.include_router(admin.router)
 app.include_router(analytics.router)
 

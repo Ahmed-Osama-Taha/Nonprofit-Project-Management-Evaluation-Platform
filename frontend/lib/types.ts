@@ -78,6 +78,41 @@ export interface SessionInfo {
   current: boolean;
 }
 
+export interface VisitorSummary {
+  id: string;
+  visitor_key: string;
+  fingerprint_hash?: string | null;
+  user_email?: string | null;
+  user_agent?: string | null;
+  timezone?: string | null;
+  screen?: string | null;
+  platform?: string | null;
+  location?: string | null;
+  ip?: string | null;
+  first_referrer?: string | null;
+  utm?: Record<string, unknown> | null;
+  consent: string;
+  event_count: number;
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface VisitorEventInfo {
+  id: string;
+  type: string;
+  url?: string | null;
+  referrer?: string | null;
+  location?: string | null;
+  new_device: boolean;
+  created_at: string;
+}
+
+export interface VisitorDetail extends VisitorSummary {
+  fingerprint_components?: Record<string, unknown> | null;
+  signals?: Record<string, unknown> | null;
+  events: VisitorEventInfo[];
+}
+
 export interface AdminSession {
   id: string;
   user_email?: string | null;

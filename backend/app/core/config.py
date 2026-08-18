@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     # single-tenant deployment where you want raw IPs for security forensics.
     session_store_ip: bool = False
 
+    # Visitor intelligence (fingerprinting + behaviour collection). Enabled for
+    # development. NOTE: analytics/marketing USE of collected data must be gated
+    # behind consent before a production launch (PDPL) — collection ≠ lawful use.
+    tracking_enabled: bool = True
+
     # Redis — token denylist (revocation) + caching + rate-limit counters.
     # Blank disables (no-op).
     redis_url: str = ""                # e.g. redis://redis:6379/0

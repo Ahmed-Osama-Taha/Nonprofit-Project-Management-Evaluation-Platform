@@ -53,6 +53,20 @@ def get_current_user(
     return user
 
 
+def optional_current_user(
+    request: Request,
+    token: str | None = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """Like get_current_user but returns None instead of raising when there is no
+    valid session. Used by public endpoints (e.g. visitor tracking) that want to
+    link an authenticated user when one happens to be present."""
+    try:
+        return get_current_user(request, token, db)
+    except HTTPException:
+        return None
+
+
 def require_roles(*roles: UserRole) -> Callable[..., User]:
     def dependency(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:
